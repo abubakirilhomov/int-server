@@ -8,7 +8,15 @@ const internSchema = new mongoose.Schema({
     ref: 'Branch', 
     required: true 
   },
-  score: { type: Number, default: 0 },
+  score: { 
+    type: Number, 
+    default: 0 
+  },
+  mentorsEvaluated: {
+    type: Map,
+    of: Boolean, // Key = mentorId, value = true (indicates mentor has evaluated)
+    default: {}
+  },
   feedbacks: [
     {
       mentorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentor' },
@@ -19,8 +27,13 @@ const internSchema = new mongoose.Schema({
   ],
   lessonsVisited: {
     type: Map,
-    of: Number,   // ключ = месяц/год или дата, значение = число посещённых уроков
+    of: Number,
     default: {}
+  },
+  grade: {
+    type: String,
+    enum: ['junior', 'middle', 'senior'],
+    default: 'junior'
   },
   createdAt: {
     type: Date,

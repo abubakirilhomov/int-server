@@ -1,33 +1,152 @@
 const Intern = require("../models/internModel");
 const Branch = require("../models/branchModel");
+const Mentor = require("../models/mentorModel");
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
+exports.loginIntern = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    // Validate required fields
+    if (!username || !password) {
+      return res.status(400).json({ error: "Имя пользователя и пароль обязательны" });
+    }
+
+    // Find intern by username
+    const intern = await Intern.findOne({ username }).select("+password");
+    if (!intern) {
+      return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
+    }
+
+    // Compare password
+    const isMatch = await bcrypt.compare(password, intern.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      {
+        _id: intern._id,
+        role: "intern", // Default role for interns
+        branchId: intern.branch
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" } // Token expires in 1 day
+    );
+
+    // Return user details and token
+    res.status(200).json({
+      token,
+      user: {
+        _id: intern._id,
+        name: intern.name,
+        lastName: intern.lastName,
+        username: intern.username,
+        role: "intern",
+        branchId: intern.branch
+      }
+    });
+  } catch (error) {
+    console.error("Ошибка при входе:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // Создание стажёра
 exports.createIntern = async (req, res) => {
   try {
-    const { name, lastName, branch } = req.body;
-    console.log(req.body);
-    // Проверка, существует ли филиал
+    const { name, lastName, username, password, branch, mentor, grade } = req.body;
+
+    // Validate required fields
+    if (!name || !lastName || !username || !password || !branch || !mentor) {
+      return res.status(400).json({ error: "Все обязательные поля должны быть заполнены" });
+    }
+
+    // Validate branch existence
     const branchExists = await Branch.findById(branch);
     if (!branchExists) {
       return res.status(400).json({ error: "Указанный филиал не найден" });
     }
 
+    // Validate mentor existence
+    const mentorExists = await Mentor.findById(mentor);
+    if (!mentorExists) {
+      return res.status(400).json({ error: "Указанный ментор не найден" });
+    }
+
+    // Validate grade if provided
+    if (grade && !['junior', 'middle', 'senior'].includes(grade)) {
+      return res.status(400).json({ error: "Недопустимое значение уровня: должен быть 'junior', 'middle' или 'senior'" });
+    }
+
     const intern = await Intern.create({
       name,
       lastName,
+      username,
+      password, // Password will be hashed by the schema's pre-save hook
       branch,
+      mentor,
       score: 0,
       feedbacks: [],
-      lessonsVisited: {},
+      lessonsVisited: [],
+      grade: grade || 'junior', // Default to 'junior' if not provided
+      mentorsEvaluated: {} // Explicitly set to empty Map for clarity
     });
 
     res.status(201).json(intern);
   } catch (error) {
     console.error("Ошибка при создании стажёра:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: "Имя пользователя уже существует" });
+    }
     res.status(500).json({ error: error.message });
   }
 };
+
+// Получение профиля стажёра
+exports.getInternProfile = async (req, res) => {
+  try {
+    // Если админ запрашивает, он может получить любого стажёра по ID
+    if (req.user?.role === "admin" && req.params.id) {
+      const intern = await Intern.findById(req.params.id)
+        .populate("branch", "name")
+        .populate("mentor", "name lastName");
+      if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
+      return res.json(intern);
+    }
+
+    // Для стажёра - берем ID из токена
+    const internId = req.user?._id || req.params.id;
+    if (!internId) {
+      return res.status(403).json({ error: "Нет доступа" });
+    }
+
+    const intern = await Intern.findById(internId)
+      .populate("branch", "name")
+      .populate("mentor", "name lastName");
+
+    if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
+
+    res.json({
+      _id: intern._id,
+      name: intern.name,
+      lastName: intern.lastName,
+      username: intern.username,
+      branch: intern.branch,
+      mentor: intern.mentor,
+      score: intern.score,
+      grade: intern.grade,
+      lessonsVisited: intern.lessonsVisited,
+      feedbacks: intern.feedbacks,
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = async (req, res) => {

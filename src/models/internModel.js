@@ -1,11 +1,19 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
 const internSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  lastName: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  lastName: { type: String, required: true, trim: true },
+  username: { type: String, required: true, unique: true, trim: true },
+  password: { type: String, required: true, minlength: 8 },
   branch: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Branch', 
+    required: true 
+  },
+  mentor: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Mentor', 
     required: true 
   },
   score: { 
@@ -14,22 +22,24 @@ const internSchema = new mongoose.Schema({
   },
   mentorsEvaluated: {
     type: Map,
-    of: Boolean, // Key = mentorId, value = true (indicates mentor has evaluated)
+    of: Boolean,
     default: {}
   },
   feedbacks: [
     {
       mentorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentor' },
-      feedback: String,
+      feedback: { type: String, trim: true },
       stars: { type: Number, min: 1, max: 5 },
       date: { type: Date, default: Date.now }
     }
   ],
-  lessonsVisited: {
-    type: Map,
-    of: Number,
-    default: {}
-  },
+  lessonsVisited: [
+    {
+      mentorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentor' },
+      lessonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson' },
+      count: { type: Number, default: 0 }
+    }
+  ],
   grade: {
     type: String,
     enum: ['junior', 'middle', 'senior'],
@@ -39,6 +49,19 @@ const internSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+// Index frequently queried fields
+internSchema.index({ username: 1 });
+internSchema.index({ branch: 1 });
+internSchema.index({ mentor: 1 });
+
+// Hash password before saving
+internSchema.pre('save', async function (next) {
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+  next();
 });
 
 module.exports = mongoose.model('Intern', internSchema);

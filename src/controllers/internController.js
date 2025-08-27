@@ -12,7 +12,7 @@ exports.loginIntern = async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: "Имя пользователя и пароль обязательны" });
     }
-
+//asd
     // Find intern by username
     const intern = await Intern.findOne({ username }).select("+password");
     if (!intern) {
@@ -261,6 +261,47 @@ exports.addLessonVisit = async (req, res) => {
     await intern.save();
 
     res.json(intern);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getInternsRating = async (req, res) => {
+  try {
+    console.log(req)
+    const interns = await Intern.find()
+      .populate("branch", "name")
+      .populate("mentor", "name lastName");
+
+    // Определяем общий рейтинг
+    const withRating = interns.map(intern => {
+      const totalLessons = intern.lessonsVisited.reduce(
+        (sum, l) => sum + l.count, 0
+      );
+
+      // допустим в месяц должно быть 12 уроков
+      const maxLessons = 12 * new Date().getMonth(); 
+      const attendance = maxLessons > 0 ? totalLessons / maxLessons : 0;
+
+      // считаем рейтинг (70% оценка, 30% посещаемость)
+      const rating = (intern.score * 0.7) + (attendance * 5 * 0.3);
+
+      return {
+        _id: intern._id,
+        name: intern.name,
+        lastName: intern.lastName,
+        branch: intern.branch,
+        mentor: intern.mentor,
+        score: intern.score,
+        attendance: (attendance * 100).toFixed(1) + "%",
+        rating: rating.toFixed(2)
+      };
+    });
+
+    // сортируем по рейтингу
+    withRating.sort((a, b) => b.rating - a.rating);
+
+    res.json(withRating);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

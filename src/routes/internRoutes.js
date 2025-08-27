@@ -4,12 +4,13 @@ const internCtrl = require('../controllers/internController');
 const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
+router.get('/rating', auth, internCtrl.getInternsRating);
 router.post('/', auth, isAdmin, internCtrl.createIntern);
+router.post('/login', internCtrl.loginIntern);
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
-router.post('/login', internCtrl.loginIntern);
 router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки
 router.get('/:id', auth, internCtrl.getInternProfile); // ментор может отмечать уроки
 

@@ -139,7 +139,7 @@ exports.getInternProfile = async (req, res) => {
       score: intern.score,
       grade: intern.grade,
       lessonsVisited: intern.lessonsVisited,
-      feedbacks: intern.feedbacks,
+      feedbacks: intern.feedbacks.length,
     });
 
   } catch (error) {

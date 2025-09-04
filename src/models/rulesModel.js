@@ -16,7 +16,7 @@ const ruleSchema = new mongoose.Schema(
       trim: true,
       unique: true,
       minlength: [3, "Название должно содержать минимум 3 символа"],
-      maxlength: [100, "Название не может превышать 100 символов"],
+      maxlength: [600, "Название не может превышать 100 символов"],
     },
     example: {
       type: String,

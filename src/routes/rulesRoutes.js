@@ -1,12 +1,12 @@
-import express from "express";
-import { createRule, getRules } from "../controllers/rulesController.js";
-const auth = require('../middleware/auth.js');
-const isAdmin = require('../middleware/isAdmin.js');
+const express = require("express");
+const { createRule, getRules } = require("../controllers/rulesController");
+const auth = require("../middleware/auth");
+const isAdmin = require("../middleware/isAdmin");
+
 const router = express.Router();
-router.use(auth)
+router.use(auth);
 
-router.post("/", auth, isAdmin,createRule);
+router.post("/", isAdmin, createRule);
+router.get("/", getRules);
 
-router.get("/", auth, getRules);
-
-export default router;
+module.exports = router;

@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const ruleSchema = new mongoose.Schema(
   {
@@ -10,17 +10,21 @@ const ruleSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
+      unique: true, // Prevent duplicate rule titles
     },
     example: {
       type: String,
       default: "",
+      trim: true, // Remove unnecessary whitespace
     },
     consequence: {
       type: String,
       default: "",
+      trim: true, // Remove unnecessary whitespace
     },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Rule", ruleSchema);
+module.exports = mongoose.model("Rule", ruleSchema);

@@ -195,7 +195,7 @@ exports.deleteIntern = async (req, res) => {
 
 exports.rateIntern = async (req, res) => {
   try {
-    const { mentorId, stars, feedback } = req.body;
+    const { mentorId, stars, feedback, violations = [] } = req.body;
     const intern = await Intern.findById(req.params.id);
     if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
 
@@ -207,6 +207,16 @@ exports.rateIntern = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Оценка должна быть целым числом от 1 до 5" });
+    }
+
+    // Validate violations
+    if (violations.length > 0) {
+      const validRuleIds = await mongoose.model("Rule").find({
+        _id: { $in: violations },
+      }).distinct("_id");
+      if (validRuleIds.length !== violations.length) {
+        return res.status(400).json({ error: "Одно или несколько нарушений недействительны" });
+      }
     }
 
     function getWeekOfYear(date) {
@@ -232,7 +242,17 @@ exports.rateIntern = async (req, res) => {
         .json({ message: "Можно оценить только раз в неделю" });
     }
 
+    // Add feedback
     intern.feedbacks.push({ mentorId, stars, feedback, date: now });
+
+    // Add violations
+    violations.forEach((ruleId) => {
+      intern.violations.push({
+        ruleId,
+        date: now,
+        notes: feedback || "", // Use feedback as notes if provided
+      });
+    });
 
     intern.mentorsEvaluated.set(mentorId, true);
 

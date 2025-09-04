@@ -8,6 +8,7 @@ const internRoutes = require('./routes/internRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const mentorRoutes = require('./routes/mentorRoutes');
 const lessonsRoutes = require('./routes/lessonRoutes');
+const rulesRoutes = require("./routes/rulesRoutes")
 
 const port = process.env.PORT || 3000;
 
@@ -24,6 +25,7 @@ app.use('/api/interns', internRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/mentors', mentorRoutes);
 app.use('/api/lessons', lessonsRoutes);
+app.use('/api/rules', rulesRoutes)
 
 connectDB();
 

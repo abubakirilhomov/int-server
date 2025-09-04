@@ -1,4 +1,4 @@
-import Rule from "../models/rulesModel";
+import Rule from "../models/rulesModel.js";
 
 export const createRule = async (req, res) => {
   try {

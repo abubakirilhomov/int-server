@@ -1,5 +1,5 @@
 import express from "express";
-import { createRule, getRules } from "../controllers/rulesController";
+import { createRule, getRules } from "../controllers/rulesController.js";
 const auth = require('../middleware/auth.js');
 const isAdmin = require('../middleware/isAdmin.js');
 const router = express.Router();

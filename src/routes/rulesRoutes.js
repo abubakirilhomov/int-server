@@ -1,5 +1,5 @@
 const express = require("express");
-const { createRule, getRules } = require("../controllers/rulesController");
+const { createRule, getRules, deleteRule } = require("../controllers/rulesController");
 const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
 
@@ -8,5 +8,6 @@ router.use(auth);
 
 router.post("/", isAdmin, createRule);
 router.get("/", getRules);
+router.delete("/:id", isAdmin, deleteRule);
 
 module.exports = router;

@@ -4,27 +4,33 @@ const ruleSchema = new mongoose.Schema(
   {
     category: {
       type: String,
-      enum: ["green", "yellow", "red", "black"],
-      required: true,
+      enum: {
+        values: ["green", "yellow", "red", "black"],
+        message: "Категория должна быть одной из: green, yellow, red, black",
+      },
+      required: [true, "Категория обязательна"],
     },
     title: {
       type: String,
-      required: true,
+      required: [true, "Название обязательно"],
       trim: true,
-      unique: true, // Prevent duplicate rule titles
+      unique: true,
+      minlength: [3, "Название должно содержать минимум 3 символа"],
+      maxlength: [100, "Название не может превышать 100 символов"],
     },
     example: {
       type: String,
       default: "",
-      trim: true, // Remove unnecessary whitespace
+      trim: true,
     },
     consequence: {
       type: String,
       default: "",
-      trim: true, // Remove unnecessary whitespace
+      trim: true,
     },
   },
   { timestamps: true }
 );
 
+ruleSchema.index({ category: 1 });
 module.exports = mongoose.model("Rule", ruleSchema);

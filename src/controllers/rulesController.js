@@ -4,20 +4,10 @@ const createRule = async (req, res) => {
   try {
     const { category, title, example, consequence } = req.body;
 
-    // Basic validation
-    if (!category || !title || !example || !consequence) {
+    if (!category || !title) {
       return res.status(400).json({
         success: false,
-        message: "Все поля обязательны",
-      });
-    }
-
-    // Check for duplicate rule
-    const existingRule = await Rule.findOne({ title });
-    if (existingRule) {
-      return res.status(400).json({
-        success: false,
-        message: "Правило с таким названием уже существует",
+        message: "Категория и название обязательны",
       });
     }
 
@@ -30,6 +20,12 @@ const createRule = async (req, res) => {
       message: "Правило добавлено",
     });
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Правило с таким названием уже существует",
+      });
+    }
     res.status(500).json({
       success: false,
       error: err.message,
@@ -66,4 +62,27 @@ const getRules = async (req, res) => {
   }
 };
 
-module.exports = { createRule, getRules };
+const deleteRule = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rule = await Rule.findByIdAndDelete(id);
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: "Правило не найдено",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Правило удалено",
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: "Ошибка при удалении правила",
+    });
+  }
+};
+
+module.exports = { createRule, getRules, deleteRule };

@@ -7,29 +7,37 @@ const createRule = async (req, res) => {
     if (!category || !title) {
       return res.status(400).json({
         success: false,
-        message: "Категория и название обязательны",
+        message: 'Category and title are required',
       });
     }
 
-    const rule = new Rule({ category, title, example, consequence });
+    const rule = new Rule({ category: category, title: title, example: example, consequence: consequence });
     await rule.save();
 
     res.status(201).json({
       success: true,
       data: rule,
-      message: "Правило добавлено",
+      message: 'Rule created successfully',
     });
   } catch (err) {
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map((e) => e.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: messages,
+      });
+    }
     if (err.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "Правило с таким названием уже существует",
+        message: 'A rule with this title already exists',
       });
     }
     res.status(500).json({
       success: false,
       error: err.message,
-      message: "Ошибка при добавлении правила",
+      message: 'Error creating rule',
     });
   }
 };

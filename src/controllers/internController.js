@@ -4,6 +4,7 @@ const Mentor = require("../models/mentorModel");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const Lesson = require("../models/lessonModel")
 
 exports.loginIntern = async (req, res) => {
   try {
@@ -98,14 +99,14 @@ exports.createIntern = async (req, res) => {
     const validGrades = [
       "junior",
       "strong-junior",
-      "strong-middle",
       "middle",
+      "strong-middle",
       "senior",
     ];
     if (grade && !validGrades.includes(grade)) {
-      return res
-        .status(400)
-        .json({ error: `Недопустимое значение уровня: должен быть один из: ${validGrades.join(", ")}` });
+      return res.status(400).json({
+        error: `Недопустимое значение уровня: должен быть один из: ${validGrades.join(", ")}`,
+      });
     }
 
     // 1. Создаём стажёра
@@ -141,11 +142,13 @@ exports.createIntern = async (req, res) => {
 
       const createdLessons = await Lesson.insertMany(placeholderLessons);
 
-      // 3. Привязываем их к intern.lessonsVisited (по количеству)
-      intern.lessonsVisited.push({
-        mentorId: mentor,
-        lessonId: createdLessons[0]._id, // можно сохранить первый lessonId
-        count: lessonsVisitedFake,       // сохраняем кол-во
+      // 3. Привязываем КАЖДЫЙ урок в intern.lessonsVisited
+      createdLessons.forEach((lesson) => {
+        intern.lessonsVisited.push({
+          mentorId: mentor,
+          lessonId: lesson._id,
+          count: 1, // по 1 за каждый lesson
+        });
       });
 
       await intern.save();
@@ -160,7 +163,6 @@ exports.createIntern = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // Получение профиля стажёра
 exports.getInternProfile = async (req, res) => {

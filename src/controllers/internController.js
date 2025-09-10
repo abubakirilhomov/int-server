@@ -57,7 +57,16 @@ exports.loginIntern = async (req, res) => {
 // Создание стажёра
 exports.createIntern = async (req, res) => {
   try {
-    const { name, lastName, username, password, branch, mentor, grade } = req.body;
+    const { 
+      name, 
+      lastName, 
+      username, 
+      password, 
+      branch, 
+      mentor, 
+      grade, 
+      dateJoined // <-- добавили сюда
+    } = req.body;
 
     // Validate required fields
     if (!name || !lastName || !username || !password || !branch || !mentor) {
@@ -91,8 +100,9 @@ exports.createIntern = async (req, res) => {
       score: 0,
       feedbacks: [],
       lessonsVisited: [],
-      grade: grade || 'junior', // Default to 'junior' if not provided
-      mentorsEvaluated: {} // Explicitly set to empty Map for clarity
+      grade: grade || 'junior',
+      mentorsEvaluated: {},
+      dateJoined: dateJoined ? new Date(dateJoined) : new Date() // <-- сохраняем дату
     });
 
     res.status(201).json(intern);

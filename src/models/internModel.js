@@ -50,6 +50,11 @@ const internSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  dateJoined: {
+    type: Date,
+    required: true,
+    default: Date.now,
+  },
   violations: [
     {
       ruleId: {

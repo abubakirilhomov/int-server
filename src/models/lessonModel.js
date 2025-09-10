@@ -1,4 +1,4 @@
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
 const lessonSchema = new mongoose.Schema(
   {
@@ -17,8 +17,13 @@ const lessonSchema = new mongoose.Schema(
       required: true,
     },
     time: {
-      type: String, 
+      type: String,
       required: true,
+    },
+    date: {
+      type: Date,
+      required: true,
+      default: Date.now, // Можно убрать default, если дата всегда указывается при создании
     },
     group: {
       type: String,
@@ -31,5 +36,8 @@ const lessonSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Индекс для оптимизации запросов по статистике
+lessonSchema.index({ date: 1, intern: 1 });
 
 module.exports = mongoose.model("Lesson", lessonSchema);

@@ -43,7 +43,7 @@ const internSchema = new mongoose.Schema({
   ],
   grade: {
     type: String,
-    enum: ["junior", "middle", "senior"],
+    enum: ["junior", "strong-junior", "middle", "strong-middle", "senior"],
     default: "junior",
   },
   createdAt: {

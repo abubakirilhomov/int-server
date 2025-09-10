@@ -10,19 +10,25 @@ exports.loginIntern = async (req, res) => {
     const { username, password } = req.body;
     // Validate required fields
     if (!username || !password) {
-      return res.status(400).json({ error: "Имя пользователя и пароль обязательны" });
+      return res
+        .status(400)
+        .json({ error: "Имя пользователя и пароль обязательны" });
     }
-//asd
+    //asd
     // Find intern by username
     const intern = await Intern.findOne({ username }).select("+password");
     if (!intern) {
-      return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
+      return res
+        .status(401)
+        .json({ error: "Неверное имя пользователя или пароль" });
     }
 
     // Compare password
     const isMatch = await bcrypt.compare(password, intern.password);
     if (!isMatch) {
-      return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
+      return res
+        .status(401)
+        .json({ error: "Неверное имя пользователя или пароль" });
     }
 
     // Generate JWT
@@ -30,7 +36,7 @@ exports.loginIntern = async (req, res) => {
       {
         _id: intern._id,
         role: "intern", // Default role for interns
-        branchId: intern.branch
+        branchId: intern.branch,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" } // Token expires in 1 day
@@ -45,8 +51,8 @@ exports.loginIntern = async (req, res) => {
         lastName: intern.lastName,
         username: intern.username,
         role: "intern",
-        branchId: intern.branch
-      }
+        branchId: intern.branch,
+      },
     });
   } catch (error) {
     console.error("Ошибка при входе:", error);
@@ -57,20 +63,23 @@ exports.loginIntern = async (req, res) => {
 // Создание стажёра
 exports.createIntern = async (req, res) => {
   try {
-    const { 
-      name, 
-      lastName, 
-      username, 
-      password, 
-      branch, 
-      mentor, 
-      grade, 
-      dateJoined // <-- добавили сюда
+    const {
+      name,
+      lastName,
+      username,
+      password,
+      branch,
+      mentor,
+      grade,
+      dateJoined,
+      lessonsVisitedFake, // <-- приходит с фронта
     } = req.body;
 
     // Validate required fields
     if (!name || !lastName || !username || !password || !branch || !mentor) {
-      return res.status(400).json({ error: "Все обязательные поля должны быть заполнены" });
+      return res
+        .status(400)
+        .json({ error: "Все обязательные поля должны быть заполнены" });
     }
 
     // Validate branch existence
@@ -86,10 +95,20 @@ exports.createIntern = async (req, res) => {
     }
 
     // Validate grade if provided
-    if (grade && !['junior', "strong-junior", "strong-middle", 'middle', 'senior'].includes(grade)) {
-      return res.status(400).json({ error: "Недопустимое значение уровня: должен быть 'junior', 'middle' или 'senior'" });
+    const validGrades = [
+      "junior",
+      "strong-junior",
+      "strong-middle",
+      "middle",
+      "senior",
+    ];
+    if (grade && !validGrades.includes(grade)) {
+      return res
+        .status(400)
+        .json({ error: `Недопустимое значение уровня: должен быть один из: ${validGrades.join(", ")}` });
     }
 
+    // 1. Создаём стажёра
     const intern = await Intern.create({
       name,
       lastName,
@@ -100,10 +119,37 @@ exports.createIntern = async (req, res) => {
       score: 0,
       feedbacks: [],
       lessonsVisited: [],
-      grade: grade || 'junior',
+      grade: grade || "junior",
       mentorsEvaluated: {},
-      dateJoined: dateJoined ? new Date(dateJoined) : new Date() // <-- сохраняем дату
+      dateJoined: dateJoined ? new Date(dateJoined) : new Date(),
     });
+
+    // 2. Если есть "старые посещения" → создаём placeholder уроки
+    if (lessonsVisitedFake && lessonsVisitedFake > 0) {
+      const placeholderLessons = Array.from(
+        { length: lessonsVisitedFake },
+        () => ({
+          intern: intern._id,
+          mentor,
+          topic: "Placeholder",
+          time: "00:00",
+          date: dateJoined || new Date(),
+          group: "Legacy",
+          feedback: "👍",
+        })
+      );
+
+      const createdLessons = await Lesson.insertMany(placeholderLessons);
+
+      // 3. Привязываем их к intern.lessonsVisited (по количеству)
+      intern.lessonsVisited.push({
+        mentorId: mentor,
+        lessonId: createdLessons[0]._id, // можно сохранить первый lessonId
+        count: lessonsVisitedFake,       // сохраняем кол-во
+      });
+
+      await intern.save();
+    }
 
     res.status(201).json(intern);
   } catch (error) {
@@ -114,6 +160,7 @@ exports.createIntern = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Получение профиля стажёра
 exports.getInternProfile = async (req, res) => {
@@ -151,12 +198,10 @@ exports.getInternProfile = async (req, res) => {
       lessonsVisited: intern.lessonsVisited,
       feedbacks: intern.feedbacks.length,
     });
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = async (req, res) => {
@@ -221,11 +266,16 @@ exports.rateIntern = async (req, res) => {
 
     // Validate violations
     if (violations.length > 0) {
-      const validRuleIds = await mongoose.model("Rule").find({
-        _id: { $in: violations },
-      }).distinct("_id");
+      const validRuleIds = await mongoose
+        .model("Rule")
+        .find({
+          _id: { $in: violations },
+        })
+        .distinct("_id");
       if (validRuleIds.length !== violations.length) {
-        return res.status(400).json({ error: "Одно или несколько нарушений недействительны" });
+        return res
+          .status(400)
+          .json({ error: "Одно или несколько нарушений недействительны" });
       }
     }
 
@@ -298,23 +348,24 @@ exports.addLessonVisit = async (req, res) => {
 
 exports.getInternsRating = async (req, res) => {
   try {
-    console.log(req)
+    console.log(req);
     const interns = await Intern.find()
       .populate("branch", "name")
       .populate("mentor", "name lastName");
 
     // Определяем общий рейтинг
-    const withRating = interns.map(intern => {
+    const withRating = interns.map((intern) => {
       const totalLessons = intern.lessonsVisited.reduce(
-        (sum, l) => sum + l.count, 0
+        (sum, l) => sum + l.count,
+        0
       );
 
       // допустим в месяц должно быть 12 уроков
-      const maxLessons = 12 * new Date().getMonth(); 
+      const maxLessons = 12 * new Date().getMonth();
       const attendance = maxLessons > 0 ? totalLessons / maxLessons : 0;
 
       // считаем рейтинг (70% оценка, 30% посещаемость)
-      const rating = (intern.score * 0.7) + (attendance * 5 * 0.3);
+      const rating = intern.score * 0.7 + attendance * 5 * 0.3;
 
       return {
         _id: intern._id,
@@ -324,7 +375,7 @@ exports.getInternsRating = async (req, res) => {
         mentor: intern.mentor,
         score: intern.score,
         attendance: (attendance * 100).toFixed(1) + "%",
-        rating: rating.toFixed(2)
+        rating: rating.toFixed(2),
       };
     });
 

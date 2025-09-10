@@ -86,7 +86,7 @@ exports.createIntern = async (req, res) => {
     }
 
     // Validate grade if provided
-    if (grade && !['junior', 'middle', 'senior'].includes(grade)) {
+    if (grade && !['junior', "strong-junior", "strong-middle", 'middle', 'senior'].includes(grade)) {
       return res.status(400).json({ error: "Недопустимое значение уровня: должен быть 'junior', 'middle' или 'senior'" });
     }
 

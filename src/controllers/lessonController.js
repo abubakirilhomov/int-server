@@ -90,7 +90,7 @@ exports.deleteLesson = async (req, res) => {
 
 exports.getAttendanceStats = async (req, res) => {
   try {
-    const { period = "month", startDate, endDate } = req.query; // period: 'day', 'week', 'month'
+    const { period = "month", startDate, endDate } = req.query;
 
     let matchStage = {};
 

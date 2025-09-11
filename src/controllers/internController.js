@@ -110,6 +110,7 @@ exports.createIntern = async (req, res) => {
     }
 
     // 1. Создаём стажёра
+    const joinedDate = dateJoined ? new Date(dateJoined) : new Date();
     const intern = await Intern.create({
       name,
       lastName,
@@ -122,19 +123,20 @@ exports.createIntern = async (req, res) => {
       lessonsVisited: [],
       grade: grade || "junior",
       mentorsEvaluated: {},
-      dateJoined: dateJoined ? new Date(dateJoined) : new Date(),
+      dateJoined: joinedDate,
     });
 
     // 2. Если есть "старые посещения" → создаём placeholder уроки
     if (lessonsVisitedFake && lessonsVisitedFake > 0) {
       const placeholderLessons = Array.from(
         { length: lessonsVisitedFake },
-        () => ({
+        (_, i) => ({
           intern: intern._id,
           mentor,
           topic: "Placeholder",
           time: "00:00",
-          date: dateJoined || new Date(),
+          // распределяем даты до dateJoined (каждый день назад)
+          date: new Date(joinedDate.getTime() - (i + 1) * 24 * 60 * 60 * 1000),
           group: "Legacy",
           feedback: "👍",
         })
@@ -142,12 +144,12 @@ exports.createIntern = async (req, res) => {
 
       const createdLessons = await Lesson.insertMany(placeholderLessons);
 
-      // 3. Привязываем КАЖДЫЙ урок в intern.lessonsVisited
+      // 3. Привязываем уроки к intern.lessonsVisited
       createdLessons.forEach((lesson) => {
         intern.lessonsVisited.push({
           mentorId: mentor,
           lessonId: lesson._id,
-          count: 1, // по 1 за каждый lesson
+          count: 1,
         });
       });
 

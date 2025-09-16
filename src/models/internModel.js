@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const Rules = require("../models/rulesModel.js");
+const grades = require("../config/grades"); // qo‘shildi
 
 const internSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -17,15 +17,8 @@ const internSchema = new mongoose.Schema({
     ref: "Mentor",
     required: true,
   },
-  score: {
-    type: Number,
-    default: 0,
-  },
-  mentorsEvaluated: {
-    type: Map,
-    of: Boolean,
-    default: {},
-  },
+  score: { type: Number, default: 0 },
+  mentorsEvaluated: { type: Map, of: Boolean, default: {} },
   feedbacks: [
     {
       mentorId: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
@@ -46,50 +39,44 @@ const internSchema = new mongoose.Schema({
     enum: ["junior", "strong-junior", "middle", "strong-middle", "senior"],
     default: "junior",
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  dateJoined: {
-    type: Date,
-    required: true,
-    default: Date.now,
-  },
+  probationPeriod: { type: Number, default: 1 },
+  lessonsPerMonth: { type: Number, default: 24 },
+  pluses: [{ type: String }],
+  helpedStudents: { type: Number, default: 0 }, 
+  badges: [{ type: String }],
+  createdAt: { type: Date, default: Date.now },
+  dateJoined: { type: Date, required: true, default: Date.now },
   violations: [
     {
-      ruleId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Rule",
-        required: [true, "Rule ID is required"],
-      },
-      date: {
-        type: Date,
-        default: Date.now,
-      },
-      notes: {
-        type: String,
-        trim: true,
-        default: "",
-      },
-      consequenceApplied: {
-        type: String,
-        trim: true,
-        default: "",
-      },
+      ruleId: { type: mongoose.Schema.Types.ObjectId, ref: "Rule", required: true },
+      date: { type: Date, default: Date.now },
+      notes: { type: String, trim: true, default: "" },
+      consequenceApplied: { type: String, trim: true, default: "" },
     },
   ],
 });
 
-// Index frequently queried fields
+// Index
 internSchema.index({ username: 1 });
 internSchema.index({ branch: 1 });
 internSchema.index({ mentor: 1 });
 
-// Hash password before saving
+// Password hash
 internSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
     this.password = await bcrypt.hash(this.password, 10);
   }
+
+  // grade bo‘yicha fieldlarni avtomatik qo‘yish
+  if (this.isNew || this.isModified("grade")) {
+    const gradeConfig = grades[this.grade];
+    if (gradeConfig) {
+      this.probationPeriod = gradeConfig.probationPeriod;
+      this.lessonsPerMonth = gradeConfig.lessonsPerMonth;
+      this.pluses = gradeConfig.plus;
+    }
+  }
+
   next();
 });
 

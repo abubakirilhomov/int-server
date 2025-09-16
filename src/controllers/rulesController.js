@@ -1,4 +1,5 @@
 const Rule = require("../models/rulesModel");
+const grades = require("../config/grades")
 
 const createRule = async (req, res) => {
   try {
@@ -55,11 +56,11 @@ const getRules = async (req, res) => {
       .skip((page - 1) * limit)
       .limit(Number(limit));
     const total = await Rule.countDocuments(filter);
-
     res.json({
       success: true,
       data: rules,
       pagination: { page, limit, total },
+      grades: grades,
     });
   } catch (err) {
     res.status(500).json({

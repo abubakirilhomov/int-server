@@ -1,6 +1,6 @@
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
-
+const grades = require("../config/grades.js")
 // Создать урок
 exports.createLesson = async (req, res) => {
   try {
@@ -94,104 +94,118 @@ exports.getAttendanceStats = async (req, res) => {
 
     let matchStage = {};
 
+    const now = new Date();
+
     if (period === "month") {
-      const now = new Date();
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      matchStage = {
-        $and: [
-          { date: { $gte: firstDay, $lte: lastDay } },
-          { $expr: { $ne: [{ $dayOfWeek: "$date" }, 1] } }, // исключаем воскресенье
-        ],
-      };
+      matchStage.date = { $gte: firstDay, $lte: lastDay };
     } else if (period === "week") {
-      const now = new Date();
-      const firstDay = new Date(now.setDate(now.getDate() - now.getDay() + 1)); // понедельник
-      const lastDay = new Date(now.setDate(now.getDate() + 5)); // суббота
-      matchStage = {
-        $and: [
-          { date: { $gte: firstDay, $lte: lastDay } },
-          { $expr: { $ne: [{ $dayOfWeek: "$date" }, 1] } },
-        ],
-      };
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const firstDay = new Date(now);
+      firstDay.setDate(now.getDate() - daysToMonday);
+      const lastDay = new Date(now);
+      lastDay.setDate(now.getDate() + (5 - daysToMonday)); // до субботы
+      matchStage.date = { $gte: firstDay, $lte: lastDay };
     } else if (startDate && endDate) {
-      matchStage = {
-        $and: [
-          { date: { $gte: new Date(startDate), $lte: new Date(endDate) } },
-          { $expr: { $ne: [{ $dayOfWeek: "$date" }, 1] } },
-        ],
+      matchStage.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
       };
     }
 
     const stats = await Lesson.aggregate([
       { $match: matchStage },
       {
-        $group: {
-          _id: "$intern",
-          attended: { $sum: 1 },
-        },
-      },
-      {
         $lookup: {
           from: "interns",
-          localField: "_id",
+          localField: "intern",
           foreignField: "_id",
           as: "intern",
         },
       },
       { $unwind: "$intern" },
+      // фильтруем по дате начала работы
+      {
+        $match: {
+          $expr: { $gte: ["$date", "$intern.startDate"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$intern._id",
+          attended: { $sum: 1 },
+          intern: { $first: "$intern" },
+        },
+      },
       {
         $project: {
-          name: { $concat: ["$intern.name", " ", "$intern.lastName"] },
-          attended: 1,
           internId: "$intern._id",
+          name: { $concat: ["$intern.name", " ", "$intern.lastName"] },
+          grade: "$intern.grade",
+          attended: 1,
         },
       },
       { $sort: { attended: -1 } },
     ]);
 
-    // Определяем норму
-    let norm = null;
-    if (period === "month") norm = calculateMonthlyNorm(new Date());
-    if (period === "week") norm = calculateWeeklyNorm(new Date());
+    // утилита: рабочие дни между двумя датами (без воскресений)
+    const countWorkDays = (start, end) => {
+      let days = 0;
+      let cur = new Date(start);
+      while (cur <= end) {
+        if (cur.getDay() !== 0) days++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return days;
+    };
 
-    const enhancedStats = stats.map((stat) => ({
-      ...stat,
-      meetsNorm: norm ? stat.attended >= norm : null,
-      percentage: norm ? Math.round((stat.attended / norm) * 100) : null,
-    }));
+    const enhancedStats = stats.map((stat) => {
+      const gradeMap = {
+        junior: "junior",
+        "strong-junior": "strongJunior",
+        middle: "middle",
+        "strong-middle": "strongMiddle",
+        senior: "senior",
+      };
+      const gradeKey = gradeMap[stat.grade] || "junior";
+      const gradeConfig = grades[gradeKey];
 
-    res.json(enhancedStats);
+      let norm = null;
+
+      if (period === "month") {
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const workDays = countWorkDays(firstDay, lastDay);
+        const lessonsPerDay = gradeConfig.lessonsPerMonth / workDays;
+        norm = Math.round(lessonsPerDay * workDays);
+      } else if (period === "week") {
+        const monday = new Date(now);
+        const dayOfWeek = now.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        monday.setDate(now.getDate() - daysToMonday);
+        const saturday = new Date(monday);
+        saturday.setDate(monday.getDate() + 5);
+        const workDays = countWorkDays(monday, saturday);
+        const lessonsPerDay = gradeConfig.lessonsPerMonth / 22; // условные 22 рабочих дня
+        norm = Math.round(lessonsPerDay * workDays);
+      } else if (startDate && endDate) {
+        const workDays = countWorkDays(new Date(startDate), new Date(endDate));
+        const lessonsPerDay = gradeConfig.lessonsPerMonth / 22;
+        norm = Math.round(lessonsPerDay * workDays);
+      }
+
+      return {
+        ...stat,
+        norm,
+        meetsNorm: norm ? stat.attended >= norm : null,
+        percentage: norm ? Math.round((stat.attended / norm) * 100) : null,
+      };
+    });
+
+    res.json({ stats: enhancedStats, grades });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-
-// Норма для месяца: рабочие дни * 2 урока
-function calculateMonthlyNorm(date) {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  let sundays = 0;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const d = new Date(year, month, day);
-    if (d.getDay() === 0) sundays++;
-  }
-
-  return (daysInMonth - sundays) * 2;
-}
-
-// Норма для недели: рабочие дни * 2 урока
-function calculateWeeklyNorm(date) {
-  const now = new Date(date);
-  const monday = new Date(now.setDate(now.getDate() - now.getDay() + 1));
-  const saturday = new Date(now.setDate(monday.getDate() + 5));
-
-  let workdays = 0;
-  for (let d = new Date(monday); d <= saturday; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() !== 0) workdays++;
-  }
-
-  return workdays * 2;
-}

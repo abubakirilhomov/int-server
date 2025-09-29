@@ -1,6 +1,6 @@
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
-const grades = require("../config/grades.js")
+const grades = require("../config/grades.js");
 // Создать урок
 exports.createLesson = async (req, res) => {
   try {
@@ -61,6 +61,33 @@ exports.getLessonById = async (req, res) => {
     res.json(lesson);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+// Получить список интернов, которых нужно оценить
+exports.getPendingLessons = async (req, res) => {
+  try {
+    const mentorId = req.user.mentorId;
+
+    const lessons = await Lesson.find({ mentor: mentorId, isRated: false })
+      .populate(
+        "intern",
+        "name lastName username branch grade score lessonsVisited feedbacks"
+      )
+      .sort({ createdAt: -1 });
+
+    const interns = lessons.map((l) => ({
+      ...l.intern.toObject(),
+      lessonId: l._id,
+      topic: l.topic,      // название темы урока
+      time: l.time,        // время урока
+      date: l.date,        // дата (если нужно)
+      group: l.group,      // группа
+    }));
+
+    res.json(interns);
+  } catch (error) {
+    res.status(500).json({ message: "Ошибка при получении уроков" });
   }
 };
 

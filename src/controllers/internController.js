@@ -87,15 +87,18 @@ exports.createIntern = async (req, res) => {
       return res.status(400).json({ error: "Указанный ментор не найден" });
     }
 
+    // нормализация
     const validGrades = Object.keys(grades);
-    if (grade && !validGrades.includes(grade)) {
+    let normalizedGrade = (grade || "junior").toString().trim();
+
+    if (!validGrades.includes(normalizedGrade)) {
       return res.status(400).json({
-        error: `Недопустимый уровень: ${validGrades.join(", ")}`,
+        error: `Недопустимый уровень. Возможные: ${validGrades.join(", ")}`,
       });
     }
 
     const joinedDate = dateJoined ? new Date(dateJoined) : new Date();
-    const gradeConfig = grades[grade || "junior"];
+    const gradeConfig = grades[normalizedGrade];
 
     const intern = await Intern.create({
       name,
@@ -107,10 +110,10 @@ exports.createIntern = async (req, res) => {
       score: 0,
       feedbacks: [],
       lessonsVisited: [],
-      grade: grade || "junior",
+      grade: normalizedGrade, // ← гарантированно правильный grade
       mentorsEvaluated: {},
       dateJoined: joinedDate,
-      probationPeriod: gradeConfig.probationPeriod,
+      probationPeriod: gradeConfig.trialPeriod,
       lessonsPerMonth: gradeConfig.lessonsPerMonth,
       pluses: gradeConfig.plus,
     });
@@ -152,6 +155,30 @@ exports.createIntern = async (req, res) => {
   }
 };
 
+exports.getPendingInterns = async (req, res) => {
+  try {
+    if (req.user?.role !== "mentor") {
+      return res.status(403).json({ error: "Доступ только для менторов" });
+    }
+
+    const mentorId = req.user._id;
+
+    // Находим всех стажёров, у которых есть задачи для этого ментора
+    const interns = await Intern.find({
+      "pendingMentors.mentorId": mentorId
+    })
+      .populate("branch", "name")
+      .populate("mentor", "name lastName")
+      .populate("pendingMentors.lessonId", "topic date time group");
+
+    res.json(interns);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+
 // Получение профиля стажёра
 exports.getInternProfile = async (req, res) => {
   try {
@@ -177,6 +204,13 @@ exports.getInternProfile = async (req, res) => {
     const gradeConfig = grades[intern.grade] || null;
     const goal = gradeConfig ? gradeConfig.lessonsPerMonth : null;
 
+    // 🔹 конвертация UTC → Asia/Tashkent
+    const createdAtLocal = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Asia/Tashkent",
+      dateStyle: "short",
+      timeStyle: "medium",
+    }).format(intern.createdAt);
+
     res.json({
       _id: intern._id,
       name: intern.name,
@@ -189,12 +223,16 @@ exports.getInternProfile = async (req, res) => {
       goal: goal,
       lessonsVisited: intern.lessonsVisited,
       feedbacks: intern.feedbacks.length,
+      probationPeriod: intern.probationPeriod,
+      pluses: intern.pluses,
+      helpedStudents: intern.helpedStudents,
+      createdAt: intern.createdAt,       // ✅ оригинал в UTC
+      createdAtLocal: createdAtLocal,   // ✅ для фронта в ташкентском времени
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = async (req, res) => {
@@ -231,7 +269,7 @@ exports.updateIntern = async (req, res) => {
           error: `Недопустимый уровень: ${Object.keys(grades).join(", ")}`,
         });
       }
-      updateData.probationPeriod = gradeConfig.probationPeriod;
+      updateData.probationPeriod = gradeConfig.trialPeriod;
       updateData.lessonsPerMonth = gradeConfig.lessonsPerMonth;
       updateData.pluses = gradeConfig.plus;
     }
@@ -248,7 +286,6 @@ exports.updateIntern = async (req, res) => {
   }
 };
 
-// Удаление стажёра
 exports.deleteIntern = async (req, res) => {
   try {
     await Intern.findByIdAndDelete(req.params.id);
@@ -258,99 +295,82 @@ exports.deleteIntern = async (req, res) => {
   }
 };
 
+
 exports.rateIntern = async (req, res) => {
   try {
-    const { mentorId, stars, feedback, violations = [] } = req.body;
-    const intern = await Intern.findById(req.params.id);
-    if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
+    const { lessonId, stars, feedback } = req.body;
+    const mentorId = req.user.mentorId;
 
-    const mentorExists = await mongoose.model("Mentor").findById(mentorId);
-    if (!mentorExists)
-      return res.status(400).json({ error: "Ментор не найден" });
-
-    if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
-      return res
-        .status(400)
-        .json({ error: "Оценка должна быть целым числом от 1 до 5" });
+    const lesson = await Lesson.findById(lessonId).populate("intern");
+    if (!lesson) return res.status(404).json({ message: "Урок не найден" });
+    if (lesson.isRated) return res.status(400).json({ message: "Урок уже оценен" });
+    if (lesson.mentor.toString() !== mentorId) {
+      return res.status(403).json({ message: "Вы не можете оценить чужой урок" });
     }
 
-    // Validate violations
-    if (violations.length > 0) {
-      const validRuleIds = await mongoose
-        .model("Rule")
-        .find({
-          _id: { $in: violations },
-        })
-        .distinct("_id");
-      if (validRuleIds.length !== violations.length) {
-        return res
-          .status(400)
-          .json({ error: "Одно или несколько нарушений недействительны" });
-      }
-    }
+    const intern = await Intern.findById(lesson.intern._id);
 
-    function getWeekOfYear(date) {
-      const start = new Date(date.getFullYear(), 0, 1);
-      const diff =
-        date -
-        start +
-        (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60000;
-      return Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
-    }
-
-    const now = new Date();
-    const lastFeedback = intern.feedbacks.find(
-      (fb) =>
-        fb.mentorId.toString() === mentorId &&
-        getWeekOfYear(new Date(fb.date)) === getWeekOfYear(now) &&
-        new Date(fb.date).getFullYear() === now.getFullYear()
-    );
-
-    if (lastFeedback) {
-      return res
-        .status(400)
-        .json({ message: "Можно оценить только раз в неделю" });
-    }
-
-    // Add feedback
-    intern.feedbacks.push({ mentorId, stars, feedback, date: now });
-
-    // Add violations
-    violations.forEach((ruleId) => {
-      intern.violations.push({
-        ruleId,
-        date: now,
-        notes: feedback || "", // Use feedback as notes if provided
-      });
+    // Добавляем новый отзыв
+    intern.feedbacks.push({
+      mentorId,
+      stars,
+      feedback,
     });
 
-    intern.mentorsEvaluated.set(mentorId, true);
-
+    // Пересчитываем общий балл (среднее арифметическое)
     const totalStars = intern.feedbacks.reduce((sum, fb) => sum + fb.stars, 0);
     intern.score = totalStars / intern.feedbacks.length;
 
     await intern.save();
 
-    res.json(intern);
+    // Отмечаем урок как оценённый
+    lesson.isRated = true;
+    await lesson.save();
+
+    res.json({
+      message: "Стажёр успешно оценён",
+      score: intern.score.toFixed(1),
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Ошибка при оценке стажёра" });
   }
 };
 
 // Добавление посещённых уроков
 exports.addLessonVisit = async (req, res) => {
   try {
-    const { month, count } = req.body;
+    const { mentorId, topic, time, date, group } = req.body;
+
     const intern = await Intern.findById(req.params.id);
     if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
 
-    intern.lessonsVisited.set(
-      month,
-      (intern.lessonsVisited.get(month) || 0) + count
-    );
+    // Создаём Lesson
+    const lesson = await Lesson.create({
+      intern: intern._id,
+      mentor: mentorId,
+      topic: topic || "Без темы",
+      time: time || "00:00",
+      date: date ? new Date(date) : new Date(),
+      group: group || "General",
+    });
+
+    // Добавляем в lessonsVisited
+    intern.lessonsVisited.push({
+      mentorId,
+      lessonId: lesson._id,
+      count: 1,
+    });
+
+    // Добавляем задачу для ментора "оценить этого стажёра"
+    intern.pendingMentors.push({
+      mentorId,
+      lessonId: lesson._id,
+    });
+
     await intern.save();
 
-    res.json(intern);
+    res.json({ message: "Урок добавлен и отправлен на оценку ментору", intern });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -431,4 +451,3 @@ exports.getInternsRating = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-

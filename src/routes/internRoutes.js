@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
 router.get('/rating', auth, internCtrl.getInternsRating);
+router.get('/pending-interns', auth, internCtrl.getPendingInterns)
 router.post('/', auth, isAdmin, internCtrl.createIntern);
 router.post('/login', internCtrl.loginIntern);
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору

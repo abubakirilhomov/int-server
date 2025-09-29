@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const grades = require("../config/grades"); // qo‘shildi
+const grades = require("../config/grades");
+const Mentor = require('./mentorModel')
+const Lesson = require('./lessonModel')
 
 const internSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -36,19 +38,30 @@ const internSchema = new mongoose.Schema({
   ],
   grade: {
     type: String,
-    enum: ["junior", "strong-junior", "middle", "strong-middle", "senior"],
+    enum: ["junior", "strongJunior", "middle", "strongMiddle", "senior"],
     default: "junior",
   },
+  pendingMentors: [
+    {
+      mentorId: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+      lessonId: { type: mongoose.Schema.Types.ObjectId, ref: "Lesson" },
+      date: { type: Date, default: Date.now },
+    },
+  ],
   probationPeriod: { type: Number, default: 1 },
   lessonsPerMonth: { type: Number, default: 24 },
   pluses: [{ type: String }],
-  helpedStudents: { type: Number, default: 0 }, 
+  helpedStudents: { type: Number, default: 0 },
   badges: [{ type: String }],
   createdAt: { type: Date, default: Date.now },
   dateJoined: { type: Date, required: true, default: Date.now },
   violations: [
     {
-      ruleId: { type: mongoose.Schema.Types.ObjectId, ref: "Rule", required: true },
+      ruleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Rule",
+        required: true,
+      },
       date: { type: Date, default: Date.now },
       notes: { type: String, trim: true, default: "" },
       consequenceApplied: { type: String, trim: true, default: "" },
@@ -71,7 +84,7 @@ internSchema.pre("save", async function (next) {
   if (this.isNew || this.isModified("grade")) {
     const gradeConfig = grades[this.grade];
     if (gradeConfig) {
-      this.probationPeriod = gradeConfig.probationPeriod;
+      this.probationPeriod = gradeConfig.trialPeriod;
       this.lessonsPerMonth = gradeConfig.lessonsPerMonth;
       this.pluses = gradeConfig.plus;
     }

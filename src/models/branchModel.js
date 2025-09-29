@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const branchSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true }
+  name: { type: String, required: true, unique: true },
+  interviews: {}
 });
 
 module.exports = mongoose.model('Branch', branchSchema);

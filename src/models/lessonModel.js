@@ -12,30 +12,19 @@ const lessonSchema = new mongoose.Schema(
       ref: "Mentor",
       required: true,
     },
-    topic: {
-      type: String,
-      required: true,
-    },
-    time: {
-      type: String,
-      required: true,
-    },
-    date: {
-      type: Date,
-      required: true,
-      default: Date.now, // Можно убрать default, если дата всегда указывается при создании
-    },
-    group: {
-      type: String,
-      required: true,
-    },
+    topic: { type: String, required: true },
+    time: { type: String, required: true },
+    date: { type: Date, required: true, default: Date.now },
+    group: { type: String, required: true },
     feedback: {
       type: String,
       enum: ["🔥", "👍", "😐", "👎"],
     },
+    isRated: { type: Boolean, default: false }, 
   },
   { timestamps: true }
 );
+
 
 // Индекс для оптимизации запросов по статистике
 lessonSchema.index({ date: 1, intern: 1 });

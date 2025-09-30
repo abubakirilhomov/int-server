@@ -228,6 +228,7 @@ exports.getInternProfile = async (req, res) => {
       helpedStudents: intern.helpedStudents,
       createdAt: intern.createdAt,       // ✅ оригинал в UTC
       createdAtLocal: createdAtLocal,   // ✅ для фронта в ташкентском времени
+      grades: grades
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

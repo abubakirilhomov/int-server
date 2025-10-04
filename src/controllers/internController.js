@@ -177,8 +177,6 @@ exports.getPendingInterns = async (req, res) => {
   }
 };
 
-
-
 // Получение профиля стажёра
 exports.getInternProfile = async (req, res) => {
   try {
@@ -449,6 +447,51 @@ exports.getInternsRating = async (req, res) => {
 
     res.json(withRating);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.upgradeInternGrade = async (req, res) => {
+  try {
+    const { newGrade } = req.body;
+
+    if (!newGrade) {
+      return res.status(400).json({ error: "Новый уровень обязателен" });
+    }
+
+    const intern = await Intern.findById(req.params.id);
+    if (!intern) {
+      return res.status(404).json({ error: "Стажёр не найден" });
+    }
+
+    const validGrades = Object.keys(grades);
+    const normalizedGrade = newGrade.toString().trim();
+
+    if (!validGrades.includes(normalizedGrade)) {
+      return res.status(400).json({
+        error: `Недопустимый уровень. Возможные: ${validGrades.join(", ")}`,
+      });
+    }
+
+    const gradeConfig = grades[normalizedGrade];
+
+    // 🔹 Обновляем грейд и параметры
+    intern.grade = normalizedGrade;
+    intern.probationPeriod = gradeConfig.trialPeriod;
+    intern.lessonsPerMonth = gradeConfig.lessonsPerMonth;
+    intern.pluses = gradeConfig.plus;
+
+    // 🔹 Можно также сбросить испытательный срок с текущей даты
+    intern.dateJoined = new Date();
+
+    await intern.save();
+
+    res.json({
+      message: `Грейд стажёра повышен до "${normalizedGrade}"`,
+      intern,
+    });
+  } catch (error) {
+    console.error("Ошибка при повышении грейда:", error);
     res.status(500).json({ error: error.message });
   }
 };

@@ -117,31 +117,42 @@ exports.deleteLesson = async (req, res) => {
 
 exports.getAttendanceStats = async (req, res) => {
   try {
-    const { period = "month", startDate, endDate } = req.query;
-
+    const { period = "month", startDate, endDate, prevMonth } = req.query;
+    const now = new Date();
     let matchStage = {};
 
-    const now = new Date();
+    // 🔹 Определяем диапазон дат
+    let firstDay, lastDay;
 
     if (period === "month") {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      if (prevMonth === "true") {
+        // прошлый месяц
+        firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      } else {
+        // текущий месяц
+        firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      }
       matchStage.date = { $gte: firstDay, $lte: lastDay };
-    } else if (period === "week") {
-      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    } 
+    else if (period === "week") {
+      const dayOfWeek = now.getDay(); // 0 = вс, 1 = пн
       const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const firstDay = new Date(now);
+      firstDay = new Date(now);
       firstDay.setDate(now.getDate() - daysToMonday);
-      const lastDay = new Date(now);
-      lastDay.setDate(now.getDate() + (5 - daysToMonday)); // до субботы
+      lastDay = new Date(firstDay);
+      lastDay.setDate(firstDay.getDate() + 5);
+
       matchStage.date = { $gte: firstDay, $lte: lastDay };
-    } else if (startDate && endDate) {
-      matchStage.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+    } 
+    else if (startDate && endDate) {
+      firstDay = new Date(startDate);
+      lastDay = new Date(endDate);
+      matchStage.date = { $gte: firstDay, $lte: lastDay };
     }
 
+    // 🔹 Собираем статистику по посещениям
     const stats = await Lesson.aggregate([
       { $match: matchStage },
       {
@@ -153,7 +164,6 @@ exports.getAttendanceStats = async (req, res) => {
         },
       },
       { $unwind: "$intern" },
-      // фильтруем по дате начала работы
       {
         $match: {
           $expr: { $gte: ["$date", "$intern.startDate"] },
@@ -177,7 +187,7 @@ exports.getAttendanceStats = async (req, res) => {
       { $sort: { attended: -1 } },
     ]);
 
-    // утилита: рабочие дни между двумя датами (без воскресений)
+    // 🔹 Подсчёт рабочих дней (без воскресений)
     const countWorkDays = (start, end) => {
       let days = 0;
       let cur = new Date(start);
@@ -188,43 +198,41 @@ exports.getAttendanceStats = async (req, res) => {
       return days;
     };
 
+    // 🔹 Обогащаем статистику нормами
     const enhancedStats = stats.map((stat) => {
+      const normalizedGrade = stat.grade?.toLowerCase().replace("-", "") || "junior";
+
       const gradeMap = {
         junior: "junior",
-        "strong-junior": "strongJunior",
+        strongjunior: "strongJunior",
         middle: "middle",
-        "strong-middle": "strongMiddle",
+        strongmiddle: "strongMiddle",
         senior: "senior",
       };
-      const gradeKey = gradeMap[stat.grade] || "junior";
+
+      const gradeKey = gradeMap[normalizedGrade] || "junior";
       const gradeConfig = grades[gradeKey];
+
+      if (!gradeConfig) {
+        console.warn(`⚠️ Не найден конфиг для грейда: ${stat.grade}`);
+        return { ...stat, norm: 0, percentage: null, meetsNorm: null };
+      }
 
       let norm = null;
 
       if (period === "month") {
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        const workDays = countWorkDays(firstDay, lastDay);
-        const lessonsPerDay = gradeConfig.lessonsPerMonth / workDays;
-        norm = Math.round(lessonsPerDay * workDays);
+        norm = gradeConfig.lessonsPerMonth;
       } else if (period === "week") {
-        const monday = new Date(now);
-        const dayOfWeek = now.getDay();
-        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        monday.setDate(now.getDate() - daysToMonday);
-        const saturday = new Date(monday);
-        saturday.setDate(monday.getDate() + 5);
-        const workDays = countWorkDays(monday, saturday);
-        const lessonsPerDay = gradeConfig.lessonsPerMonth / 22; // условные 22 рабочих дня
-        norm = Math.round(lessonsPerDay * workDays);
+        norm = Math.round(gradeConfig.lessonsPerMonth / 4);
       } else if (startDate && endDate) {
-        const workDays = countWorkDays(new Date(startDate), new Date(endDate));
+        const workDays = countWorkDays(firstDay, lastDay);
         const lessonsPerDay = gradeConfig.lessonsPerMonth / 22;
         norm = Math.round(lessonsPerDay * workDays);
       }
 
       return {
         ...stat,
+        grade: gradeKey,
         norm,
         meetsNorm: norm ? stat.attended >= norm : null,
         percentage: norm ? Math.round((stat.attended / norm) * 100) : null,
@@ -233,6 +241,7 @@ exports.getAttendanceStats = async (req, res) => {
 
     res.json({ stats: enhancedStats, grades });
   } catch (err) {
+    console.error("Ошибка в getAttendanceStats:", err);
     res.status(500).json({ message: err.message });
   }
 };

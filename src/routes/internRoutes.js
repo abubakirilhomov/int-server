@@ -14,5 +14,6 @@ router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
 router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки
 router.get('/:id', auth, internCtrl.getInternProfile); // ментор может отмечать уроки
+router.patch("/:id/upgrade", auth, internCtrl.upgradeInternGrade);
 
 module.exports = router;

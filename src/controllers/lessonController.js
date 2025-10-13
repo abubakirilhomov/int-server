@@ -79,10 +79,10 @@ exports.getPendingLessons = async (req, res) => {
     const interns = lessons.map((l) => ({
       ...l.intern.toObject(),
       lessonId: l._id,
-      topic: l.topic,      // название темы урока
-      time: l.time,        // время урока
-      date: l.date,        // дата (если нужно)
-      group: l.group,      // группа
+      topic: l.topic, // название темы урока
+      time: l.time, // время урока
+      date: l.date, // дата (если нужно)
+      group: l.group, // группа
     }));
 
     res.json(interns);
@@ -135,8 +135,7 @@ exports.getAttendanceStats = async (req, res) => {
         lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       }
       matchStage.date = { $gte: firstDay, $lte: lastDay };
-    } 
-    else if (period === "week") {
+    } else if (period === "week") {
       const dayOfWeek = now.getDay(); // 0 = вс, 1 = пн
       const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       firstDay = new Date(now);
@@ -145,8 +144,7 @@ exports.getAttendanceStats = async (req, res) => {
       lastDay.setDate(firstDay.getDate() + 5);
 
       matchStage.date = { $gte: firstDay, $lte: lastDay };
-    } 
-    else if (startDate && endDate) {
+    } else if (startDate && endDate) {
       firstDay = new Date(startDate);
       lastDay = new Date(endDate);
       matchStage.date = { $gte: firstDay, $lte: lastDay };
@@ -181,6 +179,7 @@ exports.getAttendanceStats = async (req, res) => {
           internId: "$intern._id",
           name: { $concat: ["$intern.name", " ", "$intern.lastName"] },
           grade: "$intern.grade",
+          branchId: "$intern.branch",
           attended: 1,
         },
       },
@@ -200,7 +199,8 @@ exports.getAttendanceStats = async (req, res) => {
 
     // 🔹 Обогащаем статистику нормами
     const enhancedStats = stats.map((stat) => {
-      const normalizedGrade = stat.grade?.toLowerCase().replace("-", "") || "junior";
+      const normalizedGrade =
+        stat.grade?.toLowerCase().replace("-", "") || "junior";
 
       const gradeMap = {
         junior: "junior",

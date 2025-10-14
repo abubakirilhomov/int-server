@@ -25,7 +25,8 @@ app.use(
       "https://www.interns-mars.uz",
       "https://interns-mars.uz",
       "https://mentors-mars.uz",
-      "https://interns-admin.uz"
+      "https://interns-admin.uz",
+      "https://www.interns-admin.uz/",
     ],
   })
 );

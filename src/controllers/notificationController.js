@@ -4,7 +4,8 @@ const NotificationSubscription = require("../models/notificationModel");
 webpush.setVapidDetails(
   "mailto:test@example.com",
   process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
+  process.env.VAPID_PRIVATE_KEY,
+  "https://mentors-mars.uz"
 );
 
 // 📩 Сохранение подписки от клиента

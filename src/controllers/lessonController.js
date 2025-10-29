@@ -1,12 +1,13 @@
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
 const grades = require("../config/grades.js");
+const { sendNotificationToUser } = require("./notificationController.js");
 // Создать урок
 exports.createLesson = async (req, res) => {
   try {
     const lesson = await Lesson.create(req.body);
 
-    // After creating a lesson → update intern's lessonsVisited
+    // После создания урока — обновляем посещения интерна
     if (lesson.intern) {
       const intern = await Intern.findById(lesson.intern);
 
@@ -28,11 +29,20 @@ exports.createLesson = async (req, res) => {
         }
 
         await intern.save();
+
+        // ✅ Отправляем уведомление ментору
+        await sendNotificationToUser(
+          lesson.mentor, // ID ментора
+          "mentor", // тип пользователя
+          "🧑‍🎓 Новый урок добавлен", // заголовок
+          `Интерн ${intern.name} ${intern.lastName || ""} добавил урок с вами.` // текст уведомления
+        );
       }
     }
 
     res.status(201).json(lesson);
   } catch (err) {
+    console.error("Ошибка при создании урока:", err);
     res.status(400).json({ message: err.message });
   }
 };

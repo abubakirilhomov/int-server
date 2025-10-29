@@ -495,3 +495,72 @@ exports.upgradeInternGrade = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.getRatings = async (req, res) => {
+  try {
+    const interns = await Intern.find()
+      .populate("branch", "name")
+      .populate("mentor", "name");
+
+    const internRatings = interns.map((intern) => {
+      const feedbacks = intern.feedbacks || [];
+      const lessons = intern.lessonsVisited || [];
+
+      const feedbackCount = feedbacks.length;
+      const lessonCount = lessons.length || 1;
+
+      const averageStars =
+        feedbacks.reduce((sum, f) => sum + (f.stars || 0), 0) /
+        (feedbackCount || 1);
+
+      const activityRate = Math.min(feedbackCount / lessonCount, 1);
+      const attendanceFactor =
+        Math.log(lessonCount + 1) / Math.log(30 + 1);
+
+      const planCompletion = Math.min(lessonCount / (intern.lessonsPerMonth || 24), 1);
+
+      const ratingScore =
+        (averageStars * 0.5) +
+        (activityRate * 5 * 0.2) +
+        (planCompletion * 5 * 0.2) +
+        (attendanceFactor * 5 * 0.1);
+
+      return {
+        internId: intern._id,
+        name: `${intern.name} ${intern.lastName}`,
+        branch: intern.branch?.name || "No branch",
+        grade: intern.grade,
+        averageStars: +averageStars.toFixed(2),
+        activityRate: +activityRate.toFixed(2),
+        planCompletion: +(planCompletion * 100).toFixed(1), // в %
+        lessons: lessonCount,
+        feedbacks: feedbackCount,
+        ratingScore: +ratingScore.toFixed(2),
+      };
+    });
+
+    internRatings.sort((a, b) => b.ratingScore - a.ratingScore);
+
+    // Рейтинг филиалов
+    const branchMap = {};
+    for (const i of internRatings) {
+      if (!branchMap[i.branch]) branchMap[i.branch] = [];
+      branchMap[i.branch].push(i.ratingScore);
+    }
+
+    const branchRatings = Object.entries(branchMap)
+      .map(([branch, scores]) => ({
+        branch,
+        average: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        internsCount: scores.length,
+      }))
+      .sort((a, b) => b.average - a.average);
+    res.json({
+      success: true,
+      interns: internRatings,
+      branches: branchRatings,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

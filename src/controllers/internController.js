@@ -180,34 +180,48 @@ exports.getPendingInterns = async (req, res) => {
 // Получение профиля стажёра
 exports.getInternProfile = async (req, res) => {
   try {
+    let intern;
+
+    // 🔹 Если админ и указан ID → можно смотреть чужой профиль
     if (req.user?.role === "admin" && req.params.id) {
-      const intern = await Intern.findById(req.params.id)
+      intern = await Intern.findById(req.params.id)
         .populate("branch", "name")
         .populate("mentor", "name lastName");
-      if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
-      return res.json(intern);
-    }
+    } else {
+      const internId = req.user?._id || req.params.id;
+      if (!internId) {
+        return res.status(403).json({ error: "Нет доступа" });
+      }
 
-    const internId = req.user?._id || req.params.id;
-    if (!internId) {
-      return res.status(403).json({ error: "Нет доступа" });
+      intern = await Intern.findById(internId)
+        .populate("branch", "name")
+        .populate("mentor", "name lastName");
     }
-
-    const intern = await Intern.findById(internId)
-      .populate("branch", "name")
-      .populate("mentor", "name lastName");
 
     if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
 
+    // 🔹 Инфо о грейде
     const gradeConfig = grades[intern.grade] || null;
     const goal = gradeConfig ? gradeConfig.lessonsPerMonth : null;
 
-    // 🔹 конвертация UTC → Asia/Tashkent
+    // 🔹 createdAt в ташкентском времени
     const createdAtLocal = new Intl.DateTimeFormat("ru-RU", {
       timeZone: "Asia/Tashkent",
       dateStyle: "short",
       timeStyle: "medium",
     }).format(intern.createdAt);
+
+    // 🔹 Расчёт даты окончания испытательного срока
+    const probationStart = intern.probationStartDate || intern.createdAt;
+    const probationEnd = new Date(probationStart);
+    probationEnd.setMonth(probationEnd.getMonth() + (intern.probationPeriod || 1));
+
+    // 🔹 Локальное отображение (Ташкент)
+    const probationEndLocal = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Asia/Tashkent",
+      dateStyle: "short",
+      timeStyle: "medium",
+    }).format(probationEnd);
 
     res.json({
       _id: intern._id,
@@ -218,20 +232,25 @@ exports.getInternProfile = async (req, res) => {
       mentor: intern.mentor,
       score: intern.score,
       grade: intern.grade,
-      goal: goal,
+      goal,
       lessonsVisited: intern.lessonsVisited,
       feedbacks: intern.feedbacks.length,
       probationPeriod: intern.probationPeriod,
+      probationStartDate: intern.probationStartDate, // 🔹 добавлено
+      probationEndDate: probationEnd,                // 🔹 добавлено
+      probationEndDateLocal: probationEndLocal,      // 🔹 добавлено
       pluses: intern.pluses,
       helpedStudents: intern.helpedStudents,
-      createdAt: intern.createdAt,       // ✅ оригинал в UTC
-      createdAtLocal: createdAtLocal,   // ✅ для фронта в ташкентском времени
-      grades: grades
+      createdAt: intern.createdAt,                   // UTC
+      createdAtLocal,                                // Ташкент
+      grades,
     });
   } catch (error) {
+    console.error("Ошибка при получении профиля:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = async (req, res) => {
@@ -481,8 +500,8 @@ exports.upgradeInternGrade = async (req, res) => {
     intern.lessonsPerMonth = gradeConfig.lessonsPerMonth;
     intern.pluses = gradeConfig.plus;
 
-    // 🔹 Можно также сбросить испытательный срок с текущей даты
-    intern.dateJoined = new Date();
+    // 🔹 Сбрасываем испытательный срок (а не дату присоединения)
+    intern.probationStartDate = new Date();
 
     await intern.save();
 
@@ -495,6 +514,7 @@ exports.upgradeInternGrade = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 exports.getRatings = async (req, res) => {
   try {

@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const grades = require("../config/grades");
-const Mentor = require('./mentorModel')
-const Lesson = require('./lessonModel')
+const Mentor = require("./mentorModel");
+const Lesson = require("./lessonModel");
 
 const internSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -67,6 +67,10 @@ const internSchema = new mongoose.Schema({
       consequenceApplied: { type: String, trim: true, default: "" },
     },
   ],
+  probationStartDate: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 // Index
@@ -76,15 +80,25 @@ internSchema.index({ mentor: 1 });
 
 // Password hash
 internSchema.pre("save", async function (next) {
+  // 1. Hash password
   if (this.isModified("password")) {
     this.password = await bcrypt.hash(this.password, 10);
   }
 
-  // grade bo‘yicha fieldlarni avtomatik qo‘yish
+  // 2. Sync grade → probationPeriod / lessonsPerMonth / pluses
   if (this.isNew || this.isModified("grade")) {
     const gradeConfig = grades[this.grade];
     if (gradeConfig) {
-      this.probationPeriod = gradeConfig.trialPeriod;
+      const newPeriod = gradeConfig.trialPeriod;
+
+      // ---- NEW LOGIC -------------------------------------------------
+      // If the trial period *changed* → reset the start date
+      if (this.isModified("grade") && this.probationPeriod !== newPeriod) {
+        this.probationStartDate = new Date();   // ← **reset**
+      }
+      // ----------------------------------------------------------------
+
+      this.probationPeriod = newPeriod;
       this.lessonsPerMonth = gradeConfig.lessonsPerMonth;
       this.pluses = gradeConfig.plus;
     }

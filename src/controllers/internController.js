@@ -165,7 +165,7 @@ exports.getPendingInterns = async (req, res) => {
 
     // Находим всех стажёров, у которых есть задачи для этого ментора
     const interns = await Intern.find({
-      "pendingMentors.mentorId": mentorId
+      "pendingMentors.mentorId": mentorId,
     })
       .populate("branch", "name")
       .populate("mentor", "name lastName")
@@ -214,7 +214,9 @@ exports.getInternProfile = async (req, res) => {
     // 🔹 Расчёт даты окончания испытательного срока
     const probationStart = intern.probationStartDate || intern.createdAt;
     const probationEnd = new Date(probationStart);
-    probationEnd.setMonth(probationEnd.getMonth() + (intern.probationPeriod || 1));
+    probationEnd.setMonth(
+      probationEnd.getMonth() + (intern.probationPeriod || 1)
+    );
 
     // 🔹 Локальное отображение (Ташкент)
     const probationEndLocal = new Intl.DateTimeFormat("ru-RU", {
@@ -222,7 +224,11 @@ exports.getInternProfile = async (req, res) => {
       dateStyle: "short",
       timeStyle: "medium",
     }).format(probationEnd);
-
+    const safeFeedbacks =
+      intern.feedbacks?.map((fb) => {
+        const { mentorId, ...rest } = fb.toObject ? fb.toObject() : fb;
+        return rest;
+      }) || [];
     res.json({
       _id: intern._id,
       name: intern.name,
@@ -234,15 +240,15 @@ exports.getInternProfile = async (req, res) => {
       grade: intern.grade,
       goal,
       lessonsVisited: intern.lessonsVisited,
-      feedbacks: intern.feedbacks.length,
+      feedbacks: safeFeedbacks,
       probationPeriod: intern.probationPeriod,
       probationStartDate: intern.probationStartDate, // 🔹 добавлено
-      probationEndDate: probationEnd,                // 🔹 добавлено
-      probationEndDateLocal: probationEndLocal,      // 🔹 добавлено
+      probationEndDate: probationEnd, // 🔹 добавлено
+      probationEndDateLocal: probationEndLocal, // 🔹 добавлено
       pluses: intern.pluses,
       helpedStudents: intern.helpedStudents,
-      createdAt: intern.createdAt,                   // UTC
-      createdAtLocal,                                // Ташкент
+      createdAt: intern.createdAt, // UTC
+      createdAtLocal, // Ташкент
       grades,
     });
   } catch (error) {
@@ -250,7 +256,6 @@ exports.getInternProfile = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = async (req, res) => {
@@ -313,7 +318,6 @@ exports.deleteIntern = async (req, res) => {
   }
 };
 
-
 exports.rateIntern = async (req, res) => {
   try {
     const { lessonId, stars, feedback } = req.body;
@@ -321,9 +325,12 @@ exports.rateIntern = async (req, res) => {
 
     const lesson = await Lesson.findById(lessonId).populate("intern");
     if (!lesson) return res.status(404).json({ message: "Урок не найден" });
-    if (lesson.isRated) return res.status(400).json({ message: "Урок уже оценен" });
+    if (lesson.isRated)
+      return res.status(400).json({ message: "Урок уже оценен" });
     if (lesson.mentor.toString() !== mentorId) {
-      return res.status(403).json({ message: "Вы не можете оценить чужой урок" });
+      return res
+        .status(403)
+        .json({ message: "Вы не можете оценить чужой урок" });
     }
 
     const intern = await Intern.findById(lesson.intern._id);
@@ -388,7 +395,10 @@ exports.addLessonVisit = async (req, res) => {
 
     await intern.save();
 
-    res.json({ message: "Урок добавлен и отправлен на оценку ментору", intern });
+    res.json({
+      message: "Урок добавлен и отправлен на оценку ментору",
+      intern,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -515,7 +525,6 @@ exports.upgradeInternGrade = async (req, res) => {
   }
 };
 
-
 exports.getRatings = async (req, res) => {
   try {
     const interns = await Intern.find()
@@ -534,16 +543,18 @@ exports.getRatings = async (req, res) => {
         (feedbackCount || 1);
 
       const activityRate = Math.min(feedbackCount / lessonCount, 1);
-      const attendanceFactor =
-        Math.log(lessonCount + 1) / Math.log(30 + 1);
+      const attendanceFactor = Math.log(lessonCount + 1) / Math.log(30 + 1);
 
-      const planCompletion = Math.min(lessonCount / (intern.lessonsPerMonth || 24), 1);
+      const planCompletion = Math.min(
+        lessonCount / (intern.lessonsPerMonth || 24),
+        1
+      );
 
       const ratingScore =
-        (averageStars * 0.5) +
-        (activityRate * 5 * 0.2) +
-        (planCompletion * 5 * 0.2) +
-        (attendanceFactor * 5 * 0.1);
+        averageStars * 0.5 +
+        activityRate * 5 * 0.2 +
+        planCompletion * 5 * 0.2 +
+        attendanceFactor * 5 * 0.1;
 
       return {
         internId: intern._id,
@@ -571,7 +582,9 @@ exports.getRatings = async (req, res) => {
     const branchRatings = Object.entries(branchMap)
       .map(([branch, scores]) => ({
         branch,
-        average: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        average: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(
+          2
+        ),
         internsCount: scores.length,
       }))
       .sort((a, b) => b.average - a.average);

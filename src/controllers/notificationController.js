@@ -1,6 +1,7 @@
 const webpush = require("web-push");
 const NotificationSubscription = require("../models/notificationModel");
 
+// ✅ Настройка Web Push с доменом твоего фронтенда
 webpush.setVapidDetails(
   "mailto:test@example.com",
   process.env.VAPID_PUBLIC_KEY,
@@ -8,12 +9,22 @@ webpush.setVapidDetails(
   "https://mentors-mars.uz"
 );
 
-// 📩 Сохранение подписки от клиента
+/**
+ * 📩 Сохранение или обновление подписки пользователя
+ * Вызывается с фронтенда после логина
+ */
 const subscribeUser = async (req, res) => {
   try {
     const { subscription, userId, userType } = req.body;
 
-    await NotificationSubscription.findOneAndUpdate(
+    if (!subscription || !userId || !userType) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Некорректные данные подписки" });
+    }
+
+    // 🔹 Сохраняем или обновляем подписку
+    const updatedSub = await NotificationSubscription.findOneAndUpdate(
       { userId, userType },
       {
         endpoint: subscription.endpoint,
@@ -22,19 +33,24 @@ const subscribeUser = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    res.status(201).json({ success: true });
+    console.log(`✅ Подписка сохранена для ${userType}: ${userId}`);
+    res.status(201).json({ success: true, data: updatedSub });
   } catch (err) {
-    console.error("Ошибка при сохранении подписки:", err);
+    console.error("❌ Ошибка при сохранении подписки:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// 🚀 Отправка уведомления конкретному пользователю
+/**
+ * 🚀 Отправка уведомления конкретному пользователю
+ * Используется, например, когда интерн добавляет урок → уведомить ментора
+ */
 const sendNotificationToUser = async (userId, userType, title, body) => {
   try {
     const subscription = await NotificationSubscription.findOne({ userId, userType });
+
     if (!subscription) {
-      console.log(`❌ Нет подписки для ${userType} ${userId}`);
+      console.log(`❌ Нет активной подписки для ${userType} ${userId}`);
       return;
     }
 
@@ -43,11 +59,53 @@ const sendNotificationToUser = async (userId, userType, title, body) => {
     await webpush.sendNotification(subscription, payload);
     console.log(`📨 Уведомление отправлено пользователю ${userId}`);
   } catch (err) {
-    console.error("Ошибка при отправке уведомления:", err.message);
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      console.warn(`⚠️ Подписка устарела, удаляю ${userType} ${userId}`);
+      await NotificationSubscription.deleteOne({ userId, userType });
+    } else {
+      console.error("Ошибка при отправке уведомления:", err.message);
+    }
+  }
+};
+
+/**
+ * 🧪 Тестовая отправка уведомления (через Postman или панель админа)
+ * POST /api/notifications/test
+ * body: { userId, userType, title, body }
+ */
+const testNotification = async (req, res) => {
+  try {
+    const { userId, userType, title, body } = req.body;
+
+    if (!userId || !userType || !title || !body) {
+      return res.status(400).json({ message: "Не хватает параметров" });
+    }
+
+    await sendNotificationToUser(userId, userType, title, body);
+    res.json({ success: true, message: "Уведомление отправлено" });
+  } catch (err) {
+    console.error("Ошибка при тестовой отправке:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * 🚮 Очистка всех подписок (например, для админки)
+ * DELETE /api/notifications/clear
+ */
+const clearAllSubscriptions = async (req, res) => {
+  try {
+    await NotificationSubscription.deleteMany({});
+    console.log("🧹 Все подписки удалены");
+    res.json({ success: true, message: "Все подписки очищены" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
 module.exports = {
   subscribeUser,
   sendNotificationToUser,
+  testNotification,
+  clearAllSubscriptions,
 };

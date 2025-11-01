@@ -25,6 +25,7 @@ exports.createLesson = async (req, res) => {
             mentorId: lesson.mentor,
             lessonId: lesson._id,
             count: 1,
+            date: lesson.date,
           });
         }
 
@@ -86,15 +87,16 @@ exports.getPendingLessons = async (req, res) => {
       )
       .sort({ createdAt: -1 });
 
-    const interns = lessons.map((l) => ({
-      ...l.intern.toObject(),
-      lessonId: l._id,
-      topic: l.topic, // название темы урока
-      time: l.time, // время урока
-      date: l.date, // дата (если нужно)
-      group: l.group, // группа
-    }));
-
+    const interns = lessons
+      .filter((l) => l.intern) // ✅ защищает от populate(null)
+      .map((l) => ({
+        ...l.intern.toObject(),
+        lessonId: l._id,
+        topic: l.topic,
+        time: l.time,
+        date: l.date,
+        group: l.group,
+      }));
     res.json(interns);
   } catch (error) {
     res.status(500).json({ message: "Ошибка при получении уроков" });

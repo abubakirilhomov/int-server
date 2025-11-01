@@ -106,5 +106,10 @@ internSchema.pre("save", async function (next) {
 
   next();
 });
+internSchema.pre("findOneAndDelete", async function (next) {
+  const internId = this.getQuery()._id;
+  await Lesson.deleteMany({ intern: internId });
+  next();
+});
 
 module.exports = mongoose.model("Intern", internSchema);

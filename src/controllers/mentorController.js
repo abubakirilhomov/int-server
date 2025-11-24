@@ -6,18 +6,18 @@ exports.loginMentor = async (req, res) => {
   try {
     const { name, lastName, password } = req.body;
 
-    let mentor;
+    // Ищем всех менторов по имени и фамилии
+    const mentors = await Mentor.find({ name, lastName });
 
-    if (lastName && lastName.trim() !== "") {
-      // Если указана фамилия → ищем по имени и фамилии
-      mentor = await Mentor.findOne({ name, lastName });
-    } else {
-      // Если фамилия не указана → ищем по имени, но только среди тех, у кого фамилии нет
-      mentor = await Mentor.findOne({ name, $or: [{ lastName: "" }, { lastName: { $exists: false } }] });
+    if (!mentors || mentors.length === 0) {
+      return res.status(401).json({ message: "Неверные имя или фамилия" });
     }
 
-    if (!mentor || mentor.password !== password) {
-      return res.status(401).json({ message: "Неверные имя, фамилия или пароль" });
+    // Находим конкретного ментора по паролю
+    const mentor = mentors.find(m => m.password === password);
+
+    if (!mentor) {
+      return res.status(401).json({ message: "Неверный пароль" });
     }
 
     const token = jwt.sign(
@@ -30,7 +30,7 @@ exports.loginMentor = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // удаляем пароль перед отправкой
+    // убираем пароль
     const { password: _, ...mentorData } = mentor.toObject();
 
     res.json({

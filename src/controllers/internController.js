@@ -38,9 +38,15 @@ exports.loginIntern = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
+    const refreshToken = jwt.sign(
+      { _id: intern._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
 
     res.status(200).json({
       token,
+      refreshToken,
       user: {
         _id: intern._id,
         name: intern.name,
@@ -53,6 +59,29 @@ exports.loginIntern = async (req, res) => {
   } catch (error) {
     console.error("Ошибка при входе:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken)
+      return res.status(401).json({ error: "Refresh token required" });
+
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+    const newToken = jwt.sign(
+      {
+        _id: decoded._id,
+        role: "intern",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.json({ token: newToken });
+  } catch (err) {
+    res.status(401).json({ error: "Invalid refresh token" });
   }
 };
 

@@ -9,6 +9,7 @@ router.get('/client-rating', auth, internCtrl.getRatings)
 router.get('/pending-interns', auth, internCtrl.getPendingInterns)
 router.post('/', auth, isAdmin, internCtrl.createIntern);
 router.post('/login', internCtrl.loginIntern);
+router.post("/refresh-token", internCtrl.refreshToken);
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);

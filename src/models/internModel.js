@@ -90,14 +90,9 @@ internSchema.pre("save", async function (next) {
     const gradeConfig = grades[this.grade];
     if (gradeConfig) {
       const newPeriod = gradeConfig.trialPeriod;
-
-      // ---- NEW LOGIC -------------------------------------------------
-      // If the trial period *changed* → reset the start date
       if (this.isModified("grade") && this.probationPeriod !== newPeriod) {
         this.probationStartDate = new Date();   // ← **reset**
       }
-      // ----------------------------------------------------------------
-
       this.probationPeriod = newPeriod;
       this.lessonsPerMonth = gradeConfig.lessonsPerMonth;
       this.pluses = gradeConfig.plus;

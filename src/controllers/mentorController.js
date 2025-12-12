@@ -78,7 +78,10 @@ exports.createMentor = async (req, res) => {
 };
 
 exports.getMentors = async (req, res) => {
-  const mentors = await Mentor.find().populate("branch", "name");
+  const mentors = await Mentor.find()
+    .select('-password') 
+    .populate("branch", "name");
+    
   res.json(mentors);
 };
 

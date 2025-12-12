@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
 router.post('/', auth, controller.createMentor);
-router.get('/', auth, isAdmin, controller.getMentors);
+router.get('/', auth, controller.getMentors);
 router.delete('/:id', auth, isAdmin, controller.deleteMentor);
 router.post('/login', controller.loginMentor);
 router.post("/refresh-token", controller.refreshMentorToken);

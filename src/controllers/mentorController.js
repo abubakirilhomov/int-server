@@ -1,20 +1,17 @@
 const Mentor = require("../models/mentorModel");
 const jwt = require("jsonwebtoken");
 
-// Вход
 exports.loginMentor = async (req, res) => {
   try {
     const { name, lastName, password } = req.body;
 
-    // Ищем всех менторов по имени и фамилии
     const mentors = await Mentor.find({ name, lastName });
 
     if (!mentors || mentors.length === 0) {
       return res.status(401).json({ message: "Неверные имя или фамилия" });
     }
 
-    // Находим конкретного ментора по паролю
-    const mentor = mentors.find(m => m.password === password);
+    const mentor = mentors.find((m) => m.password === password);
 
     if (!mentor) {
       return res.status(401).json({ message: "Неверный пароль" });
@@ -30,11 +27,17 @@ exports.loginMentor = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // убираем пароль
+    const refreshToken = jwt.sign(
+      { mentorId: mentor._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+
     const { password: _, ...mentorData } = mentor.toObject();
 
     res.json({
       token,
+      refreshToken,
       user: mentorData,
     });
   } catch (err) {
@@ -43,7 +46,32 @@ exports.loginMentor = async (req, res) => {
   }
 };
 
-// Остальные — без изменений
+exports.refreshMentorToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: "Refresh token обязателен" });
+    }
+
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+    const newToken = jwt.sign(
+      {
+        mentorId: decoded.mentorId,
+        role: "mentor",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error("Ошибка refresh:", err);
+    res.status(401).json({ error: "Недействительный refresh token" });
+  }
+};
+
 exports.createMentor = async (req, res) => {
   const mentor = await Mentor.create(req.body);
   res.json(mentor);

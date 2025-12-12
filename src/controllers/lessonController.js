@@ -132,7 +132,7 @@ exports.getAttendanceStats = async (req, res) => {
     const { period = "month", startDate, endDate, prevMonth } = req.query;
     const now = new Date();
     let matchStage = {};
-
+    console.log(req);
     // 🔹 Определяем диапазон дат
     let firstDay, lastDay;
 
@@ -161,41 +161,83 @@ exports.getAttendanceStats = async (req, res) => {
       lastDay = new Date(endDate);
       matchStage.date = { $gte: firstDay, $lte: lastDay };
     }
+    if (req.query.newbies === "true") {
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
+      matchStage.createdAt = { $gte: firstDayOfMonth, $lte: lastDayOfMonth };
+    }
     // 🔹 Собираем статистику по посещениям
-    const stats = await Lesson.aggregate([
-      { $match: matchStage },
+    const stats = await Intern.aggregate([
+      // Фильтр новичков по createdAt при необходимости
+      {
+        $match:
+          req.query.newbies === "true"
+            ? {
+                createdAt: {
+                  $gte: new Date(now.getFullYear(), now.getMonth(), 1),
+                  $lte: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+                },
+              }
+            : {},
+      },
+
+      // Получаем все уроки интерна за период
       {
         $lookup: {
-          from: "interns",
-          localField: "intern",
-          foreignField: "_id",
-          as: "intern",
+          from: "lessons",
+          let: { internId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$intern", "$$internId"] },
+                    { $gte: ["$date", firstDay] },
+                    { $lte: ["$date", lastDay] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "lessons",
         },
       },
-      { $unwind: "$intern" },
+
+      // Количество посещений
       {
-        $match: {
-          $expr: { $gte: ["$date", "$intern.startDate"] },
+        $addFields: {
+          attended: { $size: "$lessons" },
         },
       },
-      {
-        $group: {
-          _id: "$intern._id",
-          attended: { $sum: 1 },
-          intern: { $first: "$intern" },
-        },
-      },
+
+      // Форматирование вывода
       {
         $project: {
-          internId: "$intern._id",
-          name: { $concat: ["$intern.name", " ", "$intern.lastName"] },
-          grade: "$intern.grade",
-          branchId: "$intern.branch",
+          internId: "$_id",
+          name: { $concat: ["$name", " ", "$lastName"] },
+          grade: "$grade",
+          branchId: "$branch",
+
           attended: 1,
+
+          createdAtRaw: "$createdAt",
+          createdAt: {
+            $dateToString: {
+              format: "%Y-%m-%d %H:%M",
+              date: {
+                $dateAdd: {
+                  startDate: "$createdAt",
+                  unit: "hour",
+                  amount: 5, // Узбекистан
+                },
+              },
+            },
+          },
         },
       },
-      { $sort: { attended: -1 } },
+
+      { $sort: { attended: -1, createdAtRaw: -1 } },
     ]);
 
     // 🔹 Подсчёт рабочих дней (без воскресений)

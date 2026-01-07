@@ -31,7 +31,7 @@ exports.loginIntern = async (req, res) => {
 
     const token = jwt.sign(
       {
-        _id: intern._id,
+        id: intern._id,
         role: "intern", // Default role for interns
         branchId: intern.branch,
       },

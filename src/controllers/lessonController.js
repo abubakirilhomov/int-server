@@ -17,7 +17,6 @@ exports.createLesson = async (req, res) => {
             lv.lessonId.toString() === lesson._id.toString() &&
             lv.mentorId.toString() === lesson.mentor.toString()
         );
-
         if (existing) {
           existing.count += 1;
         } else {

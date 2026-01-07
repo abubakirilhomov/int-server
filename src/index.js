@@ -9,6 +9,7 @@ const branchRoutes = require("./routes/branchRoutes");
 const mentorRoutes = require("./routes/mentorRoutes");
 const lessonsRoutes = require("./routes/lessonRoutes");
 const rulesRoutes = require("./routes/rulesRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes")
 const notificationRoutes = require("./routes/notificationRoutes");
 const port = process.env.PORT || 3000;
 
@@ -37,6 +38,7 @@ app.use("/api/mentors", mentorRoutes);
 app.use("/api/lessons", lessonsRoutes);
 app.use("/api/rules", rulesRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 connectDB();
 

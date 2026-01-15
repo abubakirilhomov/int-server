@@ -1,14 +1,19 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const controller = require('../controllers/mentorController');
-const auth = require('../middleware/auth');
+const mentorController = require("../controllers/mentorController");
+const authMiddleware = require("../middleware/auth");
 const isAdmin = require('../middleware/isAdmin');
 
-router.post('/', auth, controller.createMentor);
-router.get('/', auth, controller.getMentors);
-router.delete('/:id', auth, isAdmin, controller.deleteMentor);
-router.post('/login', controller.loginMentor);
-router.post("/refresh-token", controller.refreshMentorToken);
+router.post('/', authMiddleware, mentorController.createMentor);
+router.get('/', authMiddleware, mentorController.getMentors);
+router.delete('/:id', authMiddleware, isAdmin, mentorController.deleteMentor);
+router.post('/login', mentorController.loginMentor);
+router.post("/refresh-token", mentorController.refreshMentorToken);
 
+router.get("/:id/stats", mentorController.getMentorStats);
+
+// Admin-only routes for debt tracking
+router.get("/debt/all", authMiddleware, isAdmin, mentorController.getAllMentorsDebt);
+router.get("/:id/debt-details", authMiddleware, isAdmin, mentorController.getMentorDebtDetails);
 
 module.exports = router;

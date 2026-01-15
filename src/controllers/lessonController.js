@@ -77,7 +77,7 @@ exports.getLessonById = async (req, res) => {
 // Получить список интернов, которых нужно оценить
 exports.getPendingLessons = async (req, res) => {
   try {
-    const mentorId = req.user.mentorId;
+    const mentorId = req.user.id || req.user._id; // Fix: use id instead of mentorId
 
     const lessons = await Lesson.find({ mentor: mentorId, isRated: false })
       .populate(
@@ -96,6 +96,7 @@ exports.getPendingLessons = async (req, res) => {
         date: l.date,
         group: l.group,
       }));
+    console.log(interns);
     res.json(interns);
   } catch (error) {
     res.status(500).json({ message: "Ошибка при получении уроков" });
@@ -130,169 +131,165 @@ exports.getAttendanceStats = async (req, res) => {
   try {
     const { period = "month", startDate, endDate, prevMonth } = req.query;
     const now = new Date();
-    let matchStage = {};
-    console.log(req);
-    // 🔹 Определяем диапазон дат
+
+    // 🔹 Определяем диапазон дат для фильтрации уроков
     let firstDay, lastDay;
 
     if (period === "month") {
       if (prevMonth === "true") {
-        // прошлый месяц
         firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
       } else {
-        // текущий месяц
         firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
         lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       }
-      matchStage.date = { $gte: firstDay, $lte: lastDay };
     } else if (period === "week") {
-      const dayOfWeek = now.getDay(); // 0 = вс, 1 = пн
+      const dayOfWeek = now.getDay();
       const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       firstDay = new Date(now);
       firstDay.setDate(now.getDate() - daysToMonday);
       lastDay = new Date(firstDay);
       lastDay.setDate(firstDay.getDate() + 5);
-
-      matchStage.date = { $gte: firstDay, $lte: lastDay };
     } else if (startDate && endDate) {
       firstDay = new Date(startDate);
       lastDay = new Date(endDate);
-      matchStage.date = { $gte: firstDay, $lte: lastDay };
     }
-    if (req.query.newbies === "true") {
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-      matchStage.createdAt = { $gte: firstDayOfMonth, $lte: lastDayOfMonth };
-    }
-    // 🔹 Собираем статистику по посещениям
-    const stats = await Intern.aggregate([
-      // Фильтр новичков по createdAt при необходимости
-      {
-        $match:
-          req.query.newbies === "true"
-            ? {
-                createdAt: {
-                  $gte: new Date(now.getFullYear(), now.getMonth(), 1),
-                  $lte: new Date(now.getFullYear(), now.getMonth() + 1, 0),
-                },
-              }
-            : {},
-      },
+    // 🔹 Получаем всех интернов и их уроки
+    const interns = await Intern.find()
+      .populate("branch", "name")
+      .lean();
 
-      // Получаем все уроки интерна за период
-      {
-        $lookup: {
-          from: "lessons",
-          let: { internId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$intern", "$$internId"] },
-                    { $gte: ["$date", firstDay] },
-                    { $lte: ["$date", lastDay] },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "lessons",
-        },
-      },
+    const allLessons = await Lesson.find({
+      date: { $gte: firstDay, $lte: lastDay },
+    }).lean();
 
-      // Количество посещений
-      {
-        $addFields: {
-          attended: { $size: "$lessons" },
-        },
-      },
-
-      // Форматирование вывода
-      {
-        $project: {
-          internId: "$_id",
-          name: { $concat: ["$name", " ", "$lastName"] },
-          grade: "$grade",
-          branchId: "$branch",
-
-          attended: 1,
-
-          createdAtRaw: "$createdAt",
-          createdAt: {
-            $dateToString: {
-              format: "%Y-%m-%d %H:%M",
-              date: {
-                $dateAdd: {
-                  startDate: "$createdAt",
-                  unit: "hour",
-                  amount: 5, // Узбекистан
-                },
-              },
-            },
-          },
-        },
-      },
-
-      { $sort: { attended: -1, createdAtRaw: -1 } },
-    ]);
-
-    // 🔹 Подсчёт рабочих дней (без воскресений)
-    const countWorkDays = (start, end) => {
-      let days = 0;
-      let cur = new Date(start);
-      while (cur <= end) {
-        if (cur.getDay() !== 0) days++;
-        cur.setDate(cur.getDate() + 1);
-      }
-      return days;
+    // 🔹 Функция для подсчета дней между датами
+    const daysBetween = (start, end) => {
+      const diffTime = Math.abs(end - start);
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     };
 
-    // 🔹 Обогащаем статистику нормами
-    const enhancedStats = stats.map((stat) => {
-      const normalizedGrade =
-        stat.grade?.toLowerCase().replace("-", "") || "junior";
+    // 🔹 Обрабатываем каждого интерна
+    const stats = interns.map((intern) => {
+      // Определяем дату начала работы
+      const startWorkDate = intern.probationStartDate || intern.createdAt;
+      const daysWorking = daysBetween(startWorkDate, now);
 
+      // Фильтруем уроки этого интерна за период
+      const internLessons = allLessons.filter(
+        (l) => l.intern.toString() === intern._id.toString()
+      );
+
+      // 🔹 Разделяем уроки на confirmed и pending
+      // Старые уроки без status: isRated=true → confirmed, иначе → pending
+      const confirmedLessons = internLessons.filter(
+        (l) =>
+          l.status === "confirmed" || (l.status === undefined && l.isRated)
+      );
+
+      const pendingLessons = internLessons.filter(
+        (l) =>
+          l.status === "pending" ||
+          (l.status === undefined && !l.isRated)
+      );
+
+      // 🔹 Получаем конфиг грейда
       const gradeMap = {
         junior: "junior",
+        "strong-junior": "strongJunior",
         strongjunior: "strongJunior",
         middle: "middle",
+        "strong-middle": "strongMiddle",
         strongmiddle: "strongMiddle",
         senior: "senior",
       };
 
-      const gradeKey = gradeMap[normalizedGrade] || "junior";
+      const gradeKey =
+        gradeMap[intern.grade?.toLowerCase()?.replace(/\s/g, "")] || "junior";
       const gradeConfig = grades[gradeKey];
 
       if (!gradeConfig) {
-        console.warn(`⚠️ Не найден конфиг для грейда: ${stat.grade}`);
-        return { ...stat, norm: 0, percentage: null, meetsNorm: null };
+        return {
+          internId: intern._id,
+          name: `${intern.name} ${intern.lastName}`,
+          grade: intern.grade,
+          branchId: intern.branch?._id,
+          branch: intern.branch,
+          confirmedCount: confirmedLessons.length,
+          pendingCount: pendingLessons.length,
+          attended: confirmedLessons.length,
+          daysWorking: daysWorking,
+          norm: null,
+          percentage: null,
+          meetsNorm: null,
+          createdAt: intern.createdAt,
+        };
       }
 
-      let norm = null;
+      // 🔹 Расчет нормы на основе дней работы
+      let norm;
 
-      if (period === "month") {
-        norm = gradeConfig.lessonsPerMonth;
+      if (period === "month" && !prevMonth) {
+        // Текущий месяц: норма = (дни_работы_в_месяце / 30) * lessonsPerMonth
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const effectiveStart =
+          startWorkDate > monthStart ? startWorkDate : monthStart;
+        const daysInMonth = daysBetween(effectiveStart, now);
+        norm = Math.ceil((daysInMonth / 30) * gradeConfig.lessonsPerMonth);
+      } else if (period === "month" && prevMonth === "true") {
+        // Прошлый месяц: полная норма если работал весь месяц
+        const prevMonthStart = firstDay;
+        const prevMonthEnd = lastDay;
+        if (startWorkDate <= prevMonthStart) {
+          norm = gradeConfig.lessonsPerMonth;
+        } else if (startWorkDate <= prevMonthEnd) {
+          const daysInPrevMonth = daysBetween(startWorkDate, prevMonthEnd);
+          norm = Math.ceil((daysInPrevMonth / 30) * gradeConfig.lessonsPerMonth);
+        } else {
+          norm = 0; // Еще не работал в прошлом месяце
+        }
       } else if (period === "week") {
         norm = Math.round(gradeConfig.lessonsPerMonth / 4);
       } else if (startDate && endDate) {
-        const workDays = countWorkDays(firstDay, lastDay);
-        const lessonsPerDay = gradeConfig.lessonsPerMonth / 22;
-        norm = Math.round(lessonsPerDay * workDays);
+        const periodDays = daysBetween(firstDay, lastDay);
+        norm = Math.ceil((periodDays / 30) * gradeConfig.lessonsPerMonth);
       }
 
+      norm = Math.max(norm, 0);
+
+      // 🔹 Расчет испытательного периода и дедлайнов
+      const trialPeriodDays = gradeConfig.trialPeriod * 30;
+      const daysRemaining = trialPeriodDays - daysWorking;
+      const nearDeadline = daysRemaining <= 7 && daysRemaining >= 0;
+      const percentage = norm > 0 ? Math.round((confirmedLessons.length / norm) * 100) : 0;
+      const canPromoteWithConcession = percentage >= 50 && percentage <= 60 && nearDeadline;
+
       return {
-        ...stat,
+        internId: intern._id,
+        name: `${intern.name} ${intern.lastName}`,
         grade: gradeKey,
-        norm,
-        meetsNorm: norm ? stat.attended >= norm : null,
-        percentage: norm ? Math.round((stat.attended / norm) * 100) : null,
+        branchId: intern.branch?._id,
+        branch: intern.branch,
+        confirmedCount: confirmedLessons.length,
+        pendingCount: pendingLessons.length,
+        attended: confirmedLessons.length, // Для совместимости
+        daysWorking: daysWorking,
+        norm: norm,
+        percentage: percentage,
+        meetsNorm: norm > 0 ? confirmedLessons.length >= norm : null,
+        createdAt: intern.createdAt,
+        trialPeriodDays: trialPeriodDays,
+        daysRemaining: daysRemaining,
+        nearDeadline: nearDeadline,
+        canPromoteWithConcession: canPromoteWithConcession,
       };
     });
 
-    res.json({ stats: enhancedStats, grades });
+    // Сортируем по проценту выполнения (по убыванию)
+    stats.sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
+
+    res.json({ stats, grades });
   } catch (err) {
     console.error("Ошибка в getAttendanceStats:", err);
     res.status(500).json({ message: err.message });

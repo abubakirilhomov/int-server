@@ -25,7 +25,7 @@ exports.rateIntern = async (req, res) => {
   const { mentorId, stars, feedback } = req.body;
   const intern = await Intern.findById(req.params.id);
   const now = new Date();
-
+  console.log(mentorId, stars, feedback, intern, "ExportController")
   const lastFeedback = intern.feedbacks.find(fb =>
     fb.mentorId.toString() === mentorId &&
     new Date(fb.date).getMonth() === now.getMonth() &&

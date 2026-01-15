@@ -20,7 +20,12 @@ const lessonSchema = new mongoose.Schema(
       type: String,
       enum: ["🔥", "👍", "😐", "👎"],
     },
-    isRated: { type: Boolean, default: false }, 
+    isRated: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["pending", "confirmed"],
+      default: "pending",
+    },
   },
   { timestamps: true }
 );

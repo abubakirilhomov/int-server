@@ -1,12 +1,11 @@
 const webpush = require("web-push");
-const NotificationSubscription = require("../models/notificationModel");
+const Subscription = require("../models/subscriptionModel");
 
 // ✅ Настройка Web Push с доменом твоего фронтенда
 webpush.setVapidDetails(
   "mailto:test@example.com",
   process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY,
-  "https://mentors-mars.uz"
+  process.env.VAPID_PRIVATE_KEY
 );
 
 /**
@@ -23,10 +22,12 @@ const subscribeUser = async (req, res) => {
         .json({ success: false, message: "Некорректные данные подписки" });
     }
 
-    // 🔹 Сохраняем или обновляем подписку
-    const updatedSub = await NotificationSubscription.findOneAndUpdate(
-      { userId, userType },
+    // 🔹 Сохраняем или обновляем подписку (по endpoint для уникальности)
+    const updatedSub = await Subscription.findOneAndUpdate(
+      { endpoint: subscription.endpoint },
       {
+        userId,
+        userType,
         endpoint: subscription.endpoint,
         keys: subscription.keys,
       },
@@ -47,7 +48,7 @@ const subscribeUser = async (req, res) => {
  */
 const sendNotificationToUser = async (userId, userType, title, body) => {
   try {
-    const subscription = await NotificationSubscription.findOne({ userId, userType });
+    const subscription = await Subscription.findOne({ userId, userType });
 
     if (!subscription) {
       console.log(`❌ Нет активной подписки для ${userType} ${userId}`);
@@ -56,12 +57,17 @@ const sendNotificationToUser = async (userId, userType, title, body) => {
 
     const payload = JSON.stringify({ title, body });
 
-    await webpush.sendNotification(subscription, payload);
+    const pushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys
+    };
+
+    await webpush.sendNotification(pushSubscription, payload);
     console.log(`📨 Уведомление отправлено пользователю ${userId}`);
   } catch (err) {
     if (err.statusCode === 410 || err.statusCode === 404) {
       console.warn(`⚠️ Подписка устарела, удаляю ${userType} ${userId}`);
-      await NotificationSubscription.deleteOne({ userId, userType });
+      await Subscription.deleteOne({ userId, userType });
     } else {
       console.error("Ошибка при отправке уведомления:", err.message);
     }
@@ -95,7 +101,7 @@ const testNotification = async (req, res) => {
  */
 const clearAllSubscriptions = async (req, res) => {
   try {
-    await NotificationSubscription.deleteMany({});
+    await Subscription.deleteMany({});
     console.log("🧹 Все подписки удалены");
     res.json({ success: true, message: "Все подписки очищены" });
   } catch (err) {

@@ -71,6 +71,24 @@ const internSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  promotionHistory: [
+    {
+      date: { type: Date, default: Date.now },
+      fromGrade: {
+        type: String,
+        enum: ["junior", "strongJunior", "middle", "strongMiddle", "senior"],
+      },
+      toGrade: {
+        type: String,
+        enum: ["junior", "strongJunior", "middle", "strongMiddle", "senior"],
+        required: true,
+      },
+      withConcession: { type: Boolean, default: false },
+      promotedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+      percentage: { type: Number }, // процент выполнения на момент повышения
+      note: { type: String, trim: true },
+    },
+  ],
 });
 
 // Index

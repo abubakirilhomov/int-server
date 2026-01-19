@@ -58,7 +58,6 @@ const UserSchema = new mongoose.Schema(
         },
         projectLink: {
             type: String,
-            required: true,
             default: "",
         },
 

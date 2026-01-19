@@ -2,6 +2,7 @@ const InternUser = require("../models/bookingModel");
 const Mentor = require("../models/mentorModel");
 const Branch = require("../models/branchModel");
 const mongoose = require("mongoose");
+
 // -----------------------------
 //  STEP 1 — ОСНОВНАЯ ИНФОРМАЦИЯ
 // -----------------------------
@@ -31,8 +32,7 @@ exports.registerStepOne = async (req, res) => {
       direction,
       phone,
       tellegrammUsername,
-      date
-
+      date,
     };
 
     const emptyFields = Object.keys(requiredFields).filter(
@@ -51,15 +51,47 @@ exports.registerStepOne = async (req, res) => {
     if (!["backend", "frontend", "fullstack"].includes(direction)) {
       return res.status(400).json({
         success: false,
-        message: "Неверное направление. Доступные: backend, frontend, fullstack",
+        message:
+          "Неверное направление. Доступные: backend, frontend, fullstack",
       });
     }
 
-    // ---- ПРОВЕРКА ЧИСЛА ----
+    // ---- ПРОВЕРКА yearsOfStudy ----
     if (isNaN(yearsOfStudy) || Number(yearsOfStudy) <= 0) {
       return res.status(400).json({
         success: false,
         message: "yearsOfStudy должно быть числом больше нуля",
+      });
+    }
+
+    // ---- ПРОВЕРКА phone ----
+    if (!/^\+?\d{9,15}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Некорректный номер телефона",
+      });
+    }
+
+    // ---- ПРОВЕРКА date ----
+    if (isNaN(Date.parse(date))) {
+      return res.status(400).json({
+        success: false,
+        message: "Некорректная дата",
+      });
+    }
+
+    // ---- ПРОВЕРКА ObjectId ----
+    if (!mongoose.Types.ObjectId.isValid(mentor)) {
+      return res.status(400).json({
+        success: false,
+        message: "Некорректный mentor ID",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(branch)) {
+      return res.status(400).json({
+        success: false,
+        message: "Некорректный branch ID",
       });
     }
 
@@ -81,7 +113,7 @@ exports.registerStepOne = async (req, res) => {
       });
     }
 
-
+    // ---- СОЗДАНИЕ ----
     const newUser = await InternUser.create({
       name,
       surname,
@@ -92,7 +124,8 @@ exports.registerStepOne = async (req, res) => {
       direction,
       tellegrammUsername,
       phone,
-      date
+      date,
+      status: "pending",
     });
 
     return res.status(201).json({
@@ -102,37 +135,41 @@ exports.registerStepOne = async (req, res) => {
     });
   } catch (error) {
     console.error("Ошибка step1:", error);
-    return res.status(500).json({ success: false, message: "Ошибка сервера" });
+    return res.status(500).json({
+      success: false,
+      message: "Ошибка сервера",
+    });
   }
 };
 
+// -----------------------------
+//  STEP 2 — ДОПОЛНИТЕЛЬНАЯ ИНФА
+// -----------------------------
 exports.registerStepTwo = async (req, res) => {
   try {
     const { userId, aboutYourself, whatYouKnow } = req.body;
 
-
-    if (!userId) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
         success: false,
-        message: "userId обязателен",
+        message: "Некорректный userId",
       });
     }
 
     if (!aboutYourself || aboutYourself.trim().length < 10) {
       return res.status(400).json({
         success: false,
-        message: "Поле 'о себе' должно быть минимум 10 символов",
+        message: "Поле 'о себе' минимум 10 символов",
       });
     }
 
     if (!whatYouKnow || whatYouKnow.trim().length < 10) {
       return res.status(400).json({
         success: false,
-        message: "Поле 'что ты знаешь' должно быть минимум 10 символов",
+        message: "Поле 'что ты знаешь' минимум 10 символов",
       });
     }
 
-    // ---- ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ ----
     const user = await InternUser.findById(userId);
 
     if (!user) {
@@ -142,7 +179,6 @@ exports.registerStepTwo = async (req, res) => {
       });
     }
 
-    // ---- ОБНОВЛЕНИЕ ----
     user.aboutYourself = aboutYourself;
     user.whatYouKnow = whatYouKnow;
 
@@ -162,6 +198,9 @@ exports.registerStepTwo = async (req, res) => {
   }
 };
 
+// -----------------------------
+//  LOGIN
+// -----------------------------
 exports.loginUser = async (req, res) => {
   try {
     const { name, surname, tellegrammUsername, phone } = req.body;
@@ -184,12 +223,14 @@ exports.loginUser = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.log("Login error:", error);
+    console.error("Login error:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-
+// -----------------------------
+//  GET ALL
+// -----------------------------
 exports.getAllBookingInterns = async (req, res) => {
   try {
     const users = await InternUser.find()
@@ -205,13 +246,14 @@ exports.getAllBookingInterns = async (req, res) => {
   }
 };
 
-
+// -----------------------------
+//  GET BY ID
+// -----------------------------
 exports.getBookingInternsId = async (req, res) => {
   try {
     const { id } = req.params;
 
-
-    if (!id || id.length !== 24) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Некорректный ID" });
     }
 
@@ -225,21 +267,24 @@ exports.getBookingInternsId = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-
-    if (error.name === "CastError") {
-      return res.status(400).json({ message: "Неверный формат ID" });
-    }
-
     res.status(500).json({
       message: "Ошибка при получении пользователя",
       error: error.message,
     });
   }
 };
+
+// -----------------------------
+//  UPDATE STATUS
+// -----------------------------
 exports.updateInternStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Некорректный ID" });
+    }
 
     if (!["approved", "pending", "canceled"].includes(status)) {
       return res.status(400).json({ message: "Некорректный статус" });
@@ -253,28 +298,17 @@ exports.updateInternStatus = async (req, res) => {
     user.status = status;
     await user.save();
 
-    // Сообщение пользователю
     let userMessage = "";
+    if (status === "approved") userMessage = "Ваша заявка одобрена.";
+    if (status === "pending") userMessage = "Заявка на рассмотрении.";
+    if (status === "canceled") userMessage = "Заявка отклонена.";
 
-    switch (status) {
-      case "approved":
-        userMessage = "Ваша заявка успешно одобрена.";
-        break;
-      case "pending":
-        userMessage = "Ваша заявка отправлена и находится в рассмотрении.";
-        break;
-      case "canceled":
-        userMessage = "Ваша заявка отклонена.";
-        break;
-    }
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Статус обновлён",
       user,
-      userMessage
+      userMessage,
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -286,16 +320,17 @@ exports.addProjectLink = async (req, res) => {
     const { bookingID } = req.params;
     const { projectLink } = req.body;
 
-
+    // Проверка ID
     if (!mongoose.Types.ObjectId.isValid(bookingID)) {
-      return res.status(400).json({ message: "Некорректный ID бронирования" });
+      return res.status(400).json({ message: "Некорректный ID пользователя" });
     }
 
-
-    if (!projectLink || projectLink.trim() === "") {
-      return res.status(400).json({ message: "projectLink обязателен" });
+    // projectLink обязателен ТОЛЬКО ЗДЕСЬ
+    if (!projectLink || projectLink.trim().length === 0) {
+      return res.status(400).json({
+        message: "Введите ссылку на проект",
+      });
     }
-
 
     const user = await InternUser.findById(bookingID);
 
@@ -303,29 +338,18 @@ exports.addProjectLink = async (req, res) => {
       return res.status(404).json({ message: "Пользователь не найден" });
     }
 
-
-    if (user.projectLink === projectLink) {
-      return res.status(400).json({
-        message: "Эта ссылка уже установлена",
-      });
-    }
-
-
+    // Можно перезаписывать или нет — на твой выбор
     user.projectLink = projectLink;
-
-
     await user.save();
 
     return res.status(200).json({
-      message: "Ссылка успешно добавлена",
+      success: true,
+      message: "Ссылка на проект добавлена",
       user,
     });
-
   } catch (error) {
     console.error("addProjectLink error:", error);
-    res.status(500).json({
-      message: "Ошибка сервера",
-      error: error.message,
-    });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+

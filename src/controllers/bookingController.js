@@ -1,124 +1,331 @@
-const Interview = require("../models/bookingModel");
-
-// 🎯 Списки навыков
-const FRONTEND_SKILLS = [
-  "HTML", "CSS", "JavaScript", "TypeScript",
-  "React", "Redux", "Redux Toolkit", "Next.js", "Vue.js", "Angular",
-  "Tailwind", "Bootstrap", "Sass", "Styled Components",
-  "Webpack", "Vite", "Babel",
-  "Jest", "React Testing Library", "Cypress",
-  "GSAP", "Framer Motion", "PWA", "Responsive Design", "Accessibility (A11y)",
-  "WebSockets", "Service Workers", "REST API (Frontend)", "GraphQL (Frontend)"
-];
-
-const BACKEND_SKILLS = [
-  "Node.js", "Express", "NestJS", "Fastify",
-  "MongoDB", "Mongoose", "PostgreSQL", "MySQL", "SQLite",
-  "Redis", "Prisma", "Sequelize",
-  "REST API (Backend)", "GraphQL (Backend)", "WebSockets (Backend)",
-  "Socket.IO", "gRPC",
-  "JWT Auth", "OAuth2", "Passport.js", "Session Auth",
-  "Stripe API", "PayPal API",
-  "File Upload (Multer)", "Image Processing (Sharp)",
-  "Unit Testing (Mocha/Chai)", "Jest (Backend)", "Supertest",
-  "Docker Basics", "Nginx Reverse Proxy"
-];
-
-const ALL_SKILLS = [...FRONTEND_SKILLS, ...BACKEND_SKILLS];
-
-// 🎯 Веса навыков
-const SKILL_WEIGHTS = {
-  HTML: 1, CSS: 1, JavaScript: 2, TypeScript: 3,
-  React: 3, Redux: 3, "Redux Toolkit": 4, "Next.js": 4, "Vue.js": 3, Angular: 4,
-  Tailwind: 2, Bootstrap: 1, Sass: 2, "Styled Components": 2,
-  Webpack: 3, Vite: 2, Babel: 2,
-  Jest: 3, "React Testing Library": 3, Cypress: 4,
-  GSAP: 2, "Framer Motion": 2, PWA: 3, "Responsive Design": 1, "Accessibility (A11y)": 2,
-  WebSockets: 3, "Service Workers": 3, "REST API (Frontend)": 2, "GraphQL (Frontend)": 3,
-
-  "Node.js": 3, Express: 3, NestJS: 4, Fastify: 3,
-  MongoDB: 3, Mongoose: 2, PostgreSQL: 4, MySQL: 3, SQLite: 2,
-  Redis: 3, Prisma: 3, Sequelize: 3,
-  "REST API (Backend)": 3, "GraphQL (Backend)": 4, "WebSockets (Backend)": 3,
-  "Socket.IO": 3, gRPC: 4,
-  "JWT Auth": 3, OAuth2: 4, "Passport.js": 3, "Session Auth": 2,
-  "Stripe API": 3, "PayPal API": 3,
-  "File Upload (Multer)": 2, "Image Processing (Sharp)": 3,
-  "Unit Testing (Mocha/Chai)": 3, "Jest (Backend)": 3, Supertest: 2,
-  "Docker Basics": 3, "Nginx Reverse Proxy": 4,
-};
-
-// 🎯 Алгоритм сложности
-const calculateDifficulty = (skills) => {
-  if (!skills || skills.length === 0) return "easy";
-
-  let total = 0;
-  skills.forEach((skill) => {
-    total += SKILL_WEIGHTS[skill] || 1;
-  });
-
-  if (total <= 8) return "easy";
-  if (total <= 18) return "medium";
-  return "hard";
-};
-
-// 📌 Создать интервью с валидацией
-const registerInterview = async (req, res) => {
+const InternUser = require("../models/bookingModel");
+const Mentor = require("../models/mentorModel");
+const Branch = require("../models/branchModel");
+const mongoose = require("mongoose");
+// -----------------------------
+//  STEP 1 — ОСНОВНАЯ ИНФОРМАЦИЯ
+// -----------------------------
+exports.registerStepOne = async (req, res) => {
   try {
-    const { firstName, lastName, age, branch, monthsStudied, direction, skills, mentor, interviewDate } = req.body;
+    const {
+      name,
+      surname,
+      mentor,
+      branch,
+      grade,
+      yearsOfStudy,
+      direction,
+      tellegrammUsername,
+      phone,
+      date,
+    } = req.body;
 
-    if (!firstName || !lastName || !age || !branch || !monthsStudied || !direction || !skills || !mentor || !interviewDate) {
-      return res.status(400).json({ message: "Все поля обязательны" });
+    // ---- ВАЛИДАЦИЯ ПУСТЫХ ПОЛЕЙ ----
+    const requiredFields = {
+      name,
+      surname,
+      mentor,
+      branch,
+      grade,
+      yearsOfStudy,
+      direction,
+      phone,
+      tellegrammUsername,
+      date
+
+    };
+
+    const emptyFields = Object.keys(requiredFields).filter(
+      (key) => !requiredFields[key]
+    );
+
+    if (emptyFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Заполните все обязательные поля",
+        emptyFields,
+      });
     }
 
-    const difficulty = calculateDifficulty(skills);
+    // ---- ПРОВЕРКА direction ----
+    if (!["backend", "frontend", "fullstack"].includes(direction)) {
+      return res.status(400).json({
+        success: false,
+        message: "Неверное направление. Доступные: backend, frontend, fullstack",
+      });
+    }
 
-    const interview = new Interview({ firstName, lastName, age, branch, monthsStudied, direction, skills, mentor, difficulty, interviewDate });
-    await interview.save();
+    // ---- ПРОВЕРКА ЧИСЛА ----
+    if (isNaN(yearsOfStudy) || Number(yearsOfStudy) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "yearsOfStudy должно быть числом больше нуля",
+      });
+    }
 
-    res.status(201).json({ message: "Interview registered successfully", interview });
+    // ---- ПРОВЕРКА mentor ----
+    const mentorExists = await Mentor.findById(mentor);
+    if (!mentorExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Указанный mentor не найден",
+      });
+    }
+
+    // ---- ПРОВЕРКА branch ----
+    const branchExists = await Branch.findById(branch);
+    if (!branchExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Указанный branch не найден",
+      });
+    }
+
+
+    const newUser = await InternUser.create({
+      name,
+      surname,
+      mentor,
+      branch,
+      grade,
+      yearsOfStudy,
+      direction,
+      tellegrammUsername,
+      phone,
+      date
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Шаг 1 успешно заполнен. Перейдите ко второму шагу.",
+      userId: newUser._id,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error registering interview", error: error.message });
+    console.error("Ошибка step1:", error);
+    return res.status(500).json({ success: false, message: "Ошибка сервера" });
   }
 };
 
-// 📌 Получить все интервью
-const getAllInterviews = async (req, res) => {
+exports.registerStepTwo = async (req, res) => {
   try {
-    const interviews = await Interview.find().sort({ createdAt: -1 });
-    res.json(interviews);
+    const { userId, aboutYourself, whatYouKnow } = req.body;
+
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId обязателен",
+      });
+    }
+
+    if (!aboutYourself || aboutYourself.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Поле 'о себе' должно быть минимум 10 символов",
+      });
+    }
+
+    if (!whatYouKnow || whatYouKnow.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Поле 'что ты знаешь' должно быть минимум 10 символов",
+      });
+    }
+
+    // ---- ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ ----
+    const user = await InternUser.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Пользователь не найден",
+      });
+    }
+
+    // ---- ОБНОВЛЕНИЕ ----
+    user.aboutYourself = aboutYourself;
+    user.whatYouKnow = whatYouKnow;
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Заявка полностью заполнена!",
+      user,
+    });
   } catch (error) {
-    res.status(500).json({ error: "Ошибка сервера при получении интервью" });
+    console.error("Ошибка step2:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Ошибка сервера",
+    });
   }
 };
 
-// 📌 Получить навыки по направлению
-const getSkillsByDirection = (req, res) => {
-  const { direction } = req.query;
-  if (!direction || !["Frontend", "Backend", "Fullstack"].includes(direction)) {
-    return res.status(400).json({ error: "Неверное направление. Допустимые значения: Frontend, Backend, Fullstack" });
+exports.loginUser = async (req, res) => {
+  try {
+    const { name, surname, tellegrammUsername, phone } = req.body;
+
+    if (!name || !surname || !tellegrammUsername || !phone) {
+      return res.status(400).json({ message: "Заполните все поля!" });
+    }
+
+    const user = await InternUser.findOne({
+      tellegrammUsername,
+      phone,
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Неверные данные" });
+    }
+
+    return res.json({
+      message: "Успешный вход!",
+      user,
+    });
+  } catch (error) {
+    console.log("Login error:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
-
-  const skills =
-    direction === "Frontend" ? FRONTEND_SKILLS :
-    direction === "Backend" ? BACKEND_SKILLS : ALL_SKILLS;
-
-  res.json(skills);
 };
 
-// 📌 Рассчитать сложность отдельно
-const getDifficulty = (req, res) => {
-  const { skills } = req.body;
-  if (!skills || !Array.isArray(skills) || skills.length === 0)пше 
-    return res.status(400).json({ error: "Нужно передать массив навыков для расчета сложности" });
 
-  const difficulty = calculateDifficulty(skills);
-  res.json({ difficulty });
+exports.getAllBookingInterns = async (req, res) => {
+  try {
+    const users = await InternUser.find()
+      .populate("mentor")
+      .populate("branch");
+
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({
+      message: "Ошибка при получении пользователей",
+      error: error.message,
+    });
+  }
 };
 
-module.exports = {
-  registerInterview,
-  getAllInterviews,
-  getSkillsByDirection,
-  getDifficulty,
+
+exports.getBookingInternsId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+
+    if (!id || id.length !== 24) {
+      return res.status(400).json({ message: "Некорректный ID" });
+    }
+
+    const user = await InternUser.findById(id)
+      .populate("mentor")
+      .populate("branch");
+
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Неверный формат ID" });
+    }
+
+    res.status(500).json({
+      message: "Ошибка при получении пользователя",
+      error: error.message,
+    });
+  }
+};
+exports.updateInternStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["approved", "pending", "canceled"].includes(status)) {
+      return res.status(400).json({ message: "Некорректный статус" });
+    }
+
+    const user = await InternUser.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    user.status = status;
+    await user.save();
+
+    // Сообщение пользователю
+    let userMessage = "";
+
+    switch (status) {
+      case "approved":
+        userMessage = "Ваша заявка успешно одобрена.";
+        break;
+      case "pending":
+        userMessage = "Ваша заявка отправлена и находится в рассмотрении.";
+        break;
+      case "canceled":
+        userMessage = "Ваша заявка отклонена.";
+        break;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Статус обновлён",
+      user,
+      userMessage
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+exports.addProjectLink = async (req, res) => {
+  try {
+    const { bookingID } = req.params;
+    const { projectLink } = req.body;
+
+
+    if (!mongoose.Types.ObjectId.isValid(bookingID)) {
+      return res.status(400).json({ message: "Некорректный ID бронирования" });
+    }
+
+
+    if (!projectLink || projectLink.trim() === "") {
+      return res.status(400).json({ message: "projectLink обязателен" });
+    }
+
+
+    const user = await InternUser.findById(bookingID);
+
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+
+    if (user.projectLink === projectLink) {
+      return res.status(400).json({
+        message: "Эта ссылка уже установлена",
+      });
+    }
+
+
+    user.projectLink = projectLink;
+
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Ссылка успешно добавлена",
+      user,
+    });
+
+  } catch (error) {
+    console.error("addProjectLink error:", error);
+    res.status(500).json({
+      message: "Ошибка сервера",
+      error: error.message,
+    });
+  }
 };

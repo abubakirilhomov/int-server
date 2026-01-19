@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const notificationSubscriptionSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    refPath: "userType", // динамическая ссылка (intern или mentor)
+    refPath: "userType", 
     required: true,
   },
   userType: {

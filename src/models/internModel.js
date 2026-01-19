@@ -73,30 +73,28 @@ const internSchema = new mongoose.Schema({
   },
 });
 
-// Index
+
 internSchema.index({ username: 1 });
 internSchema.index({ branch: 1 });
 internSchema.index({ mentor: 1 });
 
-// Password hash
+
 internSchema.pre("save", async function (next) {
-  // 1. Hash password
+  
   if (this.isModified("password")) {
     this.password = await bcrypt.hash(this.password, 10);
   }
 
-  // 2. Sync grade → probationPeriod / lessonsPerMonth / pluses
+  
   if (this.isNew || this.isModified("grade")) {
     const gradeConfig = grades[this.grade];
     if (gradeConfig) {
       const newPeriod = gradeConfig.trialPeriod;
 
-      // ---- NEW LOGIC -------------------------------------------------
-      // If the trial period *changed* → reset the start date
       if (this.isModified("grade") && this.probationPeriod !== newPeriod) {
         this.probationStartDate = new Date();   // ← **reset**
       }
-      // ----------------------------------------------------------------
+
 
       this.probationPeriod = newPeriod;
       this.lessonsPerMonth = gradeConfig.lessonsPerMonth;

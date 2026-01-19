@@ -26,7 +26,7 @@ const lessonSchema = new mongoose.Schema(
 );
 
 
-// Индекс для оптимизации запросов по статистике
+
 lessonSchema.index({ date: 1, intern: 1 });
 
 module.exports = mongoose.model("Lesson", lessonSchema);

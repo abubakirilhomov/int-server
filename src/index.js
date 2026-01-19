@@ -6,11 +6,13 @@ const app = express();
 const connectDB = require("./config/database");
 const internRoutes = require("./routes/internRoutes");
 const branchRoutes = require("./routes/branchRoutes");
+const bookingRoutes = require("./routes/bookRoutes");
 const mentorRoutes = require("./routes/mentorRoutes");
 const lessonsRoutes = require("./routes/lessonRoutes");
 const rulesRoutes = require("./routes/rulesRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const port = process.env.PORT || 3000;
+
 
 app.use(express.json());
 app.use(
@@ -31,6 +33,7 @@ app.use(
   })
 );
 
+app.use("/api/booking", bookingRoutes);
 app.use("/api/interns", internRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/mentors", mentorRoutes);

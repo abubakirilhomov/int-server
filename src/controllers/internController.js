@@ -32,7 +32,7 @@ exports.loginIntern = async (req, res) => {
     const token = jwt.sign(
       {
         _id: intern._id,
-        role: "intern", // Default role for interns
+        role: "intern", 
         branchId: intern.branch,
       },
       process.env.JWT_SECRET,
@@ -56,7 +56,7 @@ exports.loginIntern = async (req, res) => {
   }
 };
 
-// Создание стажёра
+
 exports.createIntern = async (req, res) => {
   try {
     const {
@@ -87,7 +87,7 @@ exports.createIntern = async (req, res) => {
       return res.status(400).json({ error: "Указанный ментор не найден" });
     }
 
-    // нормализация
+    
     const validGrades = Object.keys(grades);
     let normalizedGrade = (grade || "junior").toString().trim();
 
@@ -110,7 +110,7 @@ exports.createIntern = async (req, res) => {
       score: 0,
       feedbacks: [],
       lessonsVisited: [],
-      grade: normalizedGrade, // ← гарантированно правильный grade
+      grade: normalizedGrade, 
       mentorsEvaluated: {},
       dateJoined: joinedDate,
       probationPeriod: gradeConfig.trialPeriod,
@@ -163,7 +163,7 @@ exports.getPendingInterns = async (req, res) => {
 
     const mentorId = req.user._id;
 
-    // Находим всех стажёров, у которых есть задачи для этого ментора
+    
     const interns = await Intern.find({
       "pendingMentors.mentorId": mentorId,
     })
@@ -177,12 +177,12 @@ exports.getPendingInterns = async (req, res) => {
   }
 };
 
-// Получение профиля стажёра
+
 exports.getInternProfile = async (req, res) => {
   try {
     let intern;
 
-    // 🔹 Если админ и указан ID → можно смотреть чужой профиль
+    
     if (req.user?.role === "admin" && req.params.id) {
       intern = await Intern.findById(req.params.id)
         .populate("branch", "name")
@@ -200,25 +200,25 @@ exports.getInternProfile = async (req, res) => {
 
     if (!intern) return res.status(404).json({ error: "Стажёр не найден" });
 
-    // 🔹 Инфо о грейде
+    
     const gradeConfig = grades[intern.grade] || null;
     const goal = gradeConfig ? gradeConfig.lessonsPerMonth : null;
 
-    // 🔹 createdAt в ташкентском времени
+    
     const createdAtLocal = new Intl.DateTimeFormat("ru-RU", {
       timeZone: "Asia/Tashkent",
       dateStyle: "short",
       timeStyle: "medium",
     }).format(intern.createdAt);
 
-    // 🔹 Расчёт даты окончания испытательного срока
+
     const probationStart = intern.probationStartDate || intern.createdAt;
     const probationEnd = new Date(probationStart);
     probationEnd.setMonth(
       probationEnd.getMonth() + (intern.probationPeriod || 1)
     );
 
-    // 🔹 Локальное отображение (Ташкент)
+    
     const probationEndLocal = new Intl.DateTimeFormat("ru-RU", {
       timeZone: "Asia/Tashkent",
       dateStyle: "short",
@@ -242,13 +242,13 @@ exports.getInternProfile = async (req, res) => {
       lessonsVisited: intern.lessonsVisited,
       feedbacks: safeFeedbacks,
       probationPeriod: intern.probationPeriod,
-      probationStartDate: intern.probationStartDate, // 🔹 добавлено
-      probationEndDate: probationEnd, // 🔹 добавлено
-      probationEndDateLocal: probationEndLocal, // 🔹 добавлено
+      probationStartDate: intern.probationStartDate, 
+      probationEndDate: probationEnd, 
+      probationEndDateLocal: probationEndLocal, 
       pluses: intern.pluses,
       helpedStudents: intern.helpedStudents,
-      createdAt: intern.createdAt, // UTC
-      createdAtLocal, // Ташкент
+      createdAt: intern.createdAt, 
+      createdAtLocal, 
       grades,
     });
   } catch (error) {

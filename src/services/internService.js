@@ -276,12 +276,12 @@ class InternService {
         await Intern.findByIdAndDelete(id);
     }
 
-    async rateIntern(mentorId, lessonId, stars, feedback) {
+    async rateIntern(mentorId, lessonId, stars, feedback, violations = []) {
         // Validation for lessonId before usage
         if (!lessonId) {
             throw new AppError("ID урока обязателен для оценки", 400);
         }
-        console.log(lessonId, mentorId, stars, feedback, "internService")
+
         const lesson = await Lesson.findById(lessonId).populate("intern");
         if (!lesson) throw new AppError("Урок не найден", 404);
         if (lesson.isRated) throw new AppError("Урок уже оценен", 400);
@@ -303,6 +303,17 @@ class InternService {
             stars,
             feedback,
         });
+
+        // 🆕 Добавляем нарушения (если есть)
+        if (violations && violations.length > 0) {
+            violations.forEach((ruleId) => {
+                intern.violations.push({
+                    ruleId,
+                    date: new Date(),
+                    notes: feedback ? `При оценке урока. Комментарий: ${feedback}` : "При оценке урока",
+                });
+            });
+        }
 
         // Пересчитываем общий балл (среднее арифметическое)
         const totalStars = intern.feedbacks.reduce((sum, fb) => sum + fb.stars, 0);

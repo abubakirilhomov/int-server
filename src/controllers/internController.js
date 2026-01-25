@@ -184,17 +184,17 @@ exports.deleteIntern = catchAsync(async (req, res) => {
 });
 
 exports.rateIntern = catchAsync(async (req, res) => {
-  const { lessonId, stars, feedback } = req.body;
+  const { lessonId, stars, feedback, violations } = req.body;
   // Use req.user.id because auth middleware typically attaches the decoded token (which has 'id') or the user doc (which has '_id')
   // Login payload: { id: mentor._id ... }
   const mentorId = req.user.id || req.user._id;
-  console.log(lessonId, mentorId, stars, feedback, "InternController")
 
   const result = await internService.rateIntern(
     mentorId,
     lessonId,
     stars,
-    feedback
+    feedback,
+    violations
   );
   res.json(result);
 });

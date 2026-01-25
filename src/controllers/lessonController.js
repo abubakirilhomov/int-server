@@ -261,7 +261,9 @@ exports.getAttendanceStats = async (req, res) => {
       // 🔹 Расчет испытательного периода и дедлайнов
       const trialPeriodDays = gradeConfig.trialPeriod * 30;
       const daysRemaining = trialPeriodDays - daysWorking;
-      const nearDeadline = daysRemaining <= 7 && daysRemaining >= 0;
+      // ⚠️ Исправление: "близко к дедлайну" включает и тех, у кого срок истёк (отрицательное число)
+      const nearDeadline = daysRemaining <= 7;
+      const isOverdue = daysRemaining < 0;
       const percentage = norm > 0 ? Math.round((confirmedLessons.length / norm) * 100) : 0;
       const canPromoteWithConcession = percentage >= 50 && percentage <= 60 && nearDeadline;
 
@@ -282,6 +284,7 @@ exports.getAttendanceStats = async (req, res) => {
         trialPeriodDays: trialPeriodDays,
         daysRemaining: daysRemaining,
         nearDeadline: nearDeadline,
+        isOverdue: isOverdue,
         canPromoteWithConcession: canPromoteWithConcession,
       };
     });

@@ -40,10 +40,11 @@ app.use(
 );
 
 app.use("/api/interns", internRoutes);
-app.use("/api/branches", branchRoutes);
 app.use("/api/mentors", mentorRoutes);
+app.use("/api/branches", branchRoutes);
 app.use("/api/lessons", lessonsRoutes);
 app.use("/api/rules", rulesRoutes);
+app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 

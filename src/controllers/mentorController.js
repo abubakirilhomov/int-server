@@ -36,12 +36,70 @@ exports.deleteMentor = catchAsync(async (req, res) => {
   res.status(204).json({ message: "Mentor deleted" });
 });
 
+exports.updateMentor = catchAsync(async (req, res) => {
+  const { name, lastName, password, branch, role } = req.body;
+  const { id } = req.params;
+
+  // Find the mentor (select password field for potential update)
+  const mentor = await Mentor.findById(id).select('+password');
+  if (!mentor) {
+    throw new AppError("Mentor not found", 404);
+  }
+
+  // Update fields
+  if (name) mentor.name = name;
+  if (lastName !== undefined) mentor.lastName = lastName;
+  if (branch) mentor.branch = branch;
+  if (role && ['mentor', 'admin'].includes(role)) mentor.role = role;
+
+  // Only update password if provided
+  if (password && password.trim()) {
+    mentor.password = await bcrypt.hash(password, 10);
+  }
+
+  await mentor.save();
+
+  // Populate branch and hide password
+  const updatedMentor = await Mentor.findById(id).populate("branch", "name");
+
+  res.json(updatedMentor);
+});
+
+exports.resetPassword = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  // Find the mentor (select password field for reset)
+  const mentor = await Mentor.findById(id).select('+password');
+  if (!mentor) {
+    throw new AppError("Mentor not found", 404);
+  }
+
+  // Generate a temporary password (8 random characters)
+  const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase();
+
+  // Hash and save the new password
+  mentor.password = await bcrypt.hash(tempPassword, 10);
+  await mentor.save();
+
+  // Return the temporary password
+  res.json({
+    success: true,
+    message: "Password reset successfully",
+    tempPassword: tempPassword,
+    mentor: {
+      _id: mentor._id,
+      name: mentor.name,
+      lastName: mentor.lastName
+    }
+  });
+});
+
 exports.loginMentor = catchAsync(async (req, res) => {
   const { name, password } = req.body;
   if (!name || !password) throw new AppError("Name and password required", 400);
 
-  // 1. Находим всех менторов с таким именем
-  const mentors = await Mentor.find({ name });
+  // 1. Находим всех менторов с таким именем (explicitly select password)
+  const mentors = await Mentor.find({ name }).select('+password');
 
   if (!mentors || mentors.length === 0) {
     throw new AppError("Invalid credentials", 401);

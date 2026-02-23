@@ -492,6 +492,96 @@ class InternService {
     }
 
 
+    async addBonusLessons(id, { count, reason, notes, addedBy }) {
+        if (!count || count <= 0) {
+            throw new AppError("Количество бонусных уроков должно быть больше 0", 400);
+        }
+        const allowedCounts = [5, 10, 15];
+        if (!allowedCounts.includes(Number(count))) {
+            throw new AppError("Разрешённые значения бонуса: 5, 10 или 15", 400);
+        }
+        if (!reason) {
+            throw new AppError("Причина обязательна", 400);
+        }
+
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        intern.bonusLessons.push({
+            count: Number(count),
+            reason,
+            notes: notes || "",
+            date: new Date(),
+            addedBy,
+        });
+
+        await intern.save();
+
+        return {
+            message: `Бонус +${count} уроков добавлен стажёру ${intern.name} ${intern.lastName}`,
+            intern,
+        };
+    }
+
+    async setHeadIntern(id, isHeadIntern) {
+        const intern = await Intern.findById(id).populate("branch", "name");
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (isHeadIntern) {
+            // Remove head intern status from others in the same branch
+            await Intern.updateMany(
+                { branch: intern.branch._id, _id: { $ne: intern._id } },
+                { $set: { isHeadIntern: false } }
+            );
+        }
+
+        intern.isHeadIntern = Boolean(isHeadIntern);
+        await intern.save();
+
+        return {
+            message: isHeadIntern
+                ? `${intern.name} ${intern.lastName} назначен Head Intern в филиале ${intern.branch?.name}`
+                : `${intern.name} ${intern.lastName} снят с должности Head Intern`,
+            intern,
+        };
+    }
+
+    async headInternWarning(headInternId, targetInternId, { ruleId, notes }) {
+        if (!ruleId) throw new AppError("ID правила обязателен", 400);
+
+        const headIntern = await Intern.findById(headInternId);
+        if (!headIntern) throw new AppError("Стажёр не найден", 404);
+        if (!headIntern.isHeadIntern) {
+            throw new AppError("Только Head Intern может выдавать предупреждения", 403);
+        }
+
+        const targetIntern = await Intern.findById(targetInternId);
+        if (!targetIntern) throw new AppError("Целевой стажёр не найден", 404);
+
+        if (headIntern.branch.toString() !== targetIntern.branch.toString()) {
+            throw new AppError("Head Intern может выдавать предупреждения только интернам своего филиала", 403);
+        }
+
+        if (headInternId.toString() === targetInternId.toString()) {
+            throw new AppError("Нельзя выдать предупреждение самому себе", 400);
+        }
+
+        targetIntern.violations.push({
+            ruleId,
+            date: new Date(),
+            notes: notes || "",
+            issuedBy: "headIntern",
+            issuedById: headInternId,
+        });
+
+        await targetIntern.save();
+
+        return {
+            message: `Предупреждение выдано стажёру ${targetIntern.name} ${targetIntern.lastName}`,
+            intern: targetIntern,
+        };
+    }
+
     async getInternsRating() {
         const interns = await Intern.find()
             .populate("branch", "name")

@@ -65,6 +65,22 @@ const internSchema = new mongoose.Schema({
       date: { type: Date, default: Date.now },
       notes: { type: String, trim: true, default: "" },
       consequenceApplied: { type: String, trim: true, default: "" },
+      issuedBy: {
+        type: String,
+        enum: ["mentor", "headIntern", "admin"],
+        default: "mentor",
+      },
+      issuedById: { type: mongoose.Schema.Types.ObjectId },
+    },
+  ],
+  isHeadIntern: { type: Boolean, default: false },
+  bonusLessons: [
+    {
+      count: { type: Number, required: true },
+      reason: { type: String, required: true, trim: true },
+      notes: { type: String, trim: true, default: "" },
+      date: { type: Date, default: Date.now },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
     },
   ],
   probationStartDate: {

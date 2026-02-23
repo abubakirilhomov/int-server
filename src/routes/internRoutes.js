@@ -3,6 +3,7 @@ const router = express.Router();
 const internCtrl = require('../controllers/internController');
 const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
+const isHeadIntern = require('../middleware/isHeadIntern');
 const validateRequest = require('../middleware/validateRequest');
 const { createInternSchema } = require('../validations/internValidation');
 
@@ -17,7 +18,10 @@ router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
 router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки
-router.get('/:id', auth, internCtrl.getInternProfile); // ментор может отмечать уроки
+router.get('/:id', auth, internCtrl.getInternProfile);
 router.patch("/:id/upgrade", auth, internCtrl.upgradeInternGrade);
+router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
+router.patch("/:id/head-intern", auth, isAdmin, internCtrl.setHeadIntern);
+router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
 
 module.exports = router;

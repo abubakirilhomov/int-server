@@ -264,7 +264,13 @@ exports.getAttendanceStats = async (req, res) => {
       // ⚠️ Исправление: "близко к дедлайну" включает и тех, у кого срок истёк (отрицательное число)
       const nearDeadline = daysRemaining <= 7;
       const isOverdue = daysRemaining < 0;
-      const percentage = norm > 0 ? Math.round((confirmedLessons.length / norm) * 100) : 0;
+      // 🎁 Бонусные уроки за период
+      const bonusCount = (intern.bonusLessons || [])
+        .filter((b) => b.date >= firstDay && b.date <= lastDay)
+        .reduce((sum, b) => sum + (b.count || 0), 0);
+
+      const effectiveConfirmedCount = confirmedLessons.length + bonusCount;
+      const percentage = norm > 0 ? Math.round((effectiveConfirmedCount / norm) * 100) : 0;
       const canPromoteWithConcession = percentage >= 50 && percentage <= 60 && nearDeadline;
 
       return {
@@ -273,19 +279,22 @@ exports.getAttendanceStats = async (req, res) => {
         grade: gradeKey,
         branchId: intern.branch?._id,
         branch: intern.branch,
-        confirmedCount: confirmedLessons.length,
+        confirmedCount: effectiveConfirmedCount,
+        confirmedLessonsCount: confirmedLessons.length,
+        bonusCount: bonusCount,
         pendingCount: pendingLessons.length,
-        attended: confirmedLessons.length, // Для совместимости
+        attended: effectiveConfirmedCount,
         daysWorking: daysWorking,
         norm: norm,
         percentage: percentage,
-        meetsNorm: norm > 0 ? confirmedLessons.length >= norm : null,
+        meetsNorm: norm > 0 ? effectiveConfirmedCount >= norm : null,
         createdAt: intern.createdAt,
         trialPeriodDays: trialPeriodDays,
         daysRemaining: daysRemaining,
         nearDeadline: nearDeadline,
         isOverdue: isOverdue,
         canPromoteWithConcession: canPromoteWithConcession,
+        isHeadIntern: intern.isHeadIntern || false,
       };
     });
 

@@ -35,8 +35,9 @@ exports.loginIntern = async (req, res) => {
     const token = jwt.sign(
       {
         id: intern._id,
-        role: "intern", // Default role for interns
+        role: "intern",
         branchId: intern.branch,
+        isHeadIntern: intern.isHeadIntern || false,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
@@ -57,6 +58,7 @@ exports.loginIntern = async (req, res) => {
         username: intern.username,
         role: "intern",
         branchId: intern.branch,
+        isHeadIntern: intern.isHeadIntern || false,
       },
     });
   } catch (error) {
@@ -231,4 +233,31 @@ exports.upgradeInternGrade = catchAsync(async (req, res) => {
 exports.getRatings = catchAsync(async (req, res, next) => {
   const ratings = await internService.getRatings();
   res.json(ratings);
+});
+
+exports.addBonusLessons = catchAsync(async (req, res, next) => {
+  const { count, reason, notes } = req.body;
+  const adminId = req.user?.id;
+  const result = await internService.addBonusLessons(
+    req.params.id,
+    { count, reason, notes, addedBy: adminId }
+  );
+  res.json(result);
+});
+
+exports.setHeadIntern = catchAsync(async (req, res, next) => {
+  const { isHeadIntern } = req.body;
+  const result = await internService.setHeadIntern(req.params.id, isHeadIntern);
+  res.json(result);
+});
+
+exports.headInternWarning = catchAsync(async (req, res, next) => {
+  const headInternId = req.user?.id || req.user?._id;
+  const { ruleId, notes } = req.body;
+  const result = await internService.headInternWarning(
+    headInternId,
+    req.params.id,
+    { ruleId, notes }
+  );
+  res.json(result);
 });

@@ -26,6 +26,8 @@ exports.getDashboardStats = async (req, res) => {
             return res.status(400).json({ message: "Некорректный грейд пользователя" });
         }
 
+        const bonusLessons = Array.isArray(user.bonusLessons) ? user.bonusLessons : [];
+
         // 2. Dates for Trial Period
         const probationStartDate = user.probationStartDate || user.createdAt;
         const startDate = new Date(probationStartDate);
@@ -79,21 +81,43 @@ exports.getDashboardStats = async (req, res) => {
         ]);
 
         // --- Process Current Month ---
-        const lessonsConfirmed = monthLessonsData.filter(l =>
+        const lessonsConfirmedRaw = monthLessonsData.filter(l =>
             l.status === "confirmed" || (l.status === undefined && l.isRated)
         ).length;
         const lessonsPending = monthLessonsData.filter(l =>
             l.status === "pending" || (l.status === undefined && !l.isRated)
         ).length;
 
+        const bonusThisMonth = bonusLessons.reduce((sum, bonus) => {
+            const bonusDate = bonus?.date ? new Date(bonus.date) : null;
+            if (!bonusDate || Number.isNaN(bonusDate.getTime())) return sum;
+            if (bonusDate >= startOfMonth && bonusDate < endOfMonth) {
+                return sum + (bonus.count || 0);
+            }
+            return sum;
+        }, 0);
+
+        const lessonsConfirmed = lessonsConfirmedRaw + bonusThisMonth;
+
         // Calculate total lessons visited (historical total)
-        const totalLessons = user.lessonsVisited?.reduce((sum, l) => sum + (l.count || 0), 0) || 0;
+        const totalLessonsRaw = user.lessonsVisited?.reduce((sum, l) => sum + (l.count || 0), 0) || 0;
+        const totalBonusLessons = bonusLessons.reduce((sum, bonus) => sum + (bonus.count || 0), 0);
+        const totalLessons = totalLessonsRaw + totalBonusLessons;
 
 
         // --- Process Trial Period ---
-        const trialLessonsConfirmed = trialLessonsData.filter(l =>
+        const trialLessonsConfirmedRaw = trialLessonsData.filter(l =>
             l.status === "confirmed" || (l.status === undefined && l.isRated)
         ).length;
+        const trialBonusLessons = bonusLessons.reduce((sum, bonus) => {
+            const bonusDate = bonus?.date ? new Date(bonus.date) : null;
+            if (!bonusDate || Number.isNaN(bonusDate.getTime())) return sum;
+            if (bonusDate >= startDate) {
+                return sum + (bonus.count || 0);
+            }
+            return sum;
+        }, 0);
+        const trialLessonsConfirmed = trialLessonsConfirmedRaw + trialBonusLessons;
 
         const trialTotalGoal = gradeConfig.lessonsPerMonth * gradeConfig.trialPeriod;
 
@@ -147,15 +171,45 @@ exports.getDashboardStats = async (req, res) => {
             }));
 
         // --- Format Monthly History ---
-        const monthlyHistory = monthlyHistoryData.map(item => {
-            const date = new Date(item._id.year, item._id.month - 1);
-            return {
-                monthName: date.toLocaleString('ru-RU', { month: 'short' }),
-                fullDate: date,
-                year: item._id.year,
-                count: item.count
-            };
-        }).reverse();
+        const monthlyHistoryMap = new Map();
+        monthlyHistoryData.forEach((item) => {
+            const key = `${item._id.year}-${String(item._id.month).padStart(2, "0")}`;
+            monthlyHistoryMap.set(key, (monthlyHistoryMap.get(key) || 0) + item.count);
+        });
+
+        bonusLessons.forEach((bonus) => {
+            const bonusDate = bonus?.date ? new Date(bonus.date) : null;
+            if (!bonusDate || Number.isNaN(bonusDate.getTime())) return;
+            const year = bonusDate.getFullYear();
+            const month = bonusDate.getMonth() + 1;
+            const key = `${year}-${String(month).padStart(2, "0")}`;
+            monthlyHistoryMap.set(key, (monthlyHistoryMap.get(key) || 0) + (bonus.count || 0));
+        });
+
+        const monthlyHistory = Array.from(monthlyHistoryMap.entries())
+            .map(([key, count]) => {
+                const [yearStr, monthStr] = key.split("-");
+                return {
+                    year: Number(yearStr),
+                    month: Number(monthStr),
+                    count,
+                };
+            })
+            .sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+            })
+            .slice(0, 6)
+            .reverse()
+            .map((item) => {
+                const date = new Date(item.year, item.month - 1);
+                return {
+                    monthName: date.toLocaleString("ru-RU", { month: "short" }),
+                    fullDate: date,
+                    year: item.year,
+                    count: item.count,
+                };
+            });
 
         // --- Overall Progress for Compatibility ---
         const lessonsProgress = adjustedMonthlyGoal > 0 ? Math.min((lessonsConfirmed / adjustedMonthlyGoal) * 100, 100) : 0;

@@ -56,6 +56,28 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     };
   }
 
+  if (intern.manualActivation?.isEnabled) {
+    const enabledAt = intern.manualActivation.enabledAt;
+    const stillValid =
+      enabledAt &&
+      enabledAt.getMonth() === referenceDate.getMonth() &&
+      enabledAt.getFullYear() === referenceDate.getFullYear();
+
+    if (stillValid) {
+      return {
+        isPlanBlocked: false,
+        reason: "Аккаунт активирован администратором вручную.",
+        weeklyTarget: getWeeklyTarget(intern.lessonsPerMonth),
+        completedWeeksInMonth: getCompletedWeeksInMonth(referenceDate),
+        requiredLessonsByNow: 0,
+        confirmedLessonsThisMonth: 0,
+        deficit: 0,
+        isManuallyActivated: true,
+      };
+    }
+    // Активация истекла (другой месяц) — продолжаем обычную проверку
+  }
+
   const { start, end } = getMonthBounds(referenceDate);
   const completedWeeksInMonth = getCompletedWeeksInMonth(referenceDate);
   const weeklyTarget = getWeeklyTarget(intern.lessonsPerMonth);
@@ -90,7 +112,8 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
 
   const confirmedLessonsThisMonth = confirmedLessonsCount + bonusLessonsCount;
   const deficit = Math.max(0, requiredLessonsByNow - confirmedLessonsThisMonth);
-  const isPlanBlocked = requiredLessonsByNow > 0 && deficit > 0;
+  // Блокировка только если прошло больше 3 рабочих дней с начала периода
+  const isPlanBlocked = elapsedWorkingDays > 3 && requiredLessonsByNow > 0 && deficit > 0;
 
   return {
     isPlanBlocked,
@@ -111,15 +134,3 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
 module.exports = {
   getInternPlanStatus,
 };
-  if (intern.manualActivation?.isEnabled) {
-    return {
-      isPlanBlocked: false,
-      reason: "Аккаунт активирован администратором вручную.",
-      weeklyTarget: getWeeklyTarget(intern.lessonsPerMonth),
-      completedWeeksInMonth: getCompletedWeeksInMonth(referenceDate),
-      requiredLessonsByNow: 0,
-      confirmedLessonsThisMonth: 0,
-      deficit: 0,
-      isManuallyActivated: true,
-    };
-  }

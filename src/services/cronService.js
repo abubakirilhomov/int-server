@@ -3,6 +3,7 @@ const webpush = require("web-push");
 const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
 const Subscription = require("../models/subscriptionModel");
+const Intern = require("../models/internModel");
 
 // Настройка web-push (ключи должны быть в .env)
 const publicVapidKey = process.env.VAPID_PUBLIC_KEY;
@@ -18,7 +19,7 @@ if (publicVapidKey && privateVapidKey) {
 
 class CronService {
     init() {
-        // Запуск каждый день в 10:00 утра
+        // Каждый день в 10:00 — напоминания
         cron.schedule("0 10 * * *", async () => {
             console.log("🔔 Running daily notification job...");
             try {
@@ -29,7 +30,17 @@ class CronService {
             }
         });
 
-        console.log("✅ Cron jobs initialized (daily at 10:00 AM)");
+        // 1-го числа каждого месяца в 00:05 — сброс истёкших ручных активаций
+        cron.schedule("5 0 1 * *", async () => {
+            console.log("🔄 Resetting expired manual activations...");
+            try {
+                await this.resetExpiredManualActivations();
+            } catch (error) {
+                console.error("❌ Error resetting manual activations:", error);
+            }
+        });
+
+        console.log("✅ Cron jobs initialized");
     }
 
     async notifyMentorsWithDebt() {
@@ -92,6 +103,29 @@ class CronService {
     async notifyInternsWithPendingLessons() {
         // Логика напоминания интернам (если нужно в будущем)
         console.log("💡 Notifying interns about pending lessons (placeholder)");
+    }
+
+    async resetExpiredManualActivations() {
+        const now = new Date();
+        // Найти интернов, у которых isEnabled=true, но enabledAt в прошлом месяце или раньше
+        const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const result = await Intern.updateMany(
+            {
+                "manualActivation.isEnabled": true,
+                "manualActivation.enabledAt": { $lt: startOfCurrentMonth },
+            },
+            {
+                $set: {
+                    "manualActivation.isEnabled": false,
+                    "manualActivation.note": "",
+                    "manualActivation.enabledAt": null,
+                    "manualActivation.enabledBy": null,
+                },
+            }
+        );
+
+        console.log(`✅ Reset manual activation for ${result.modifiedCount} intern(s)`);
     }
 }
 

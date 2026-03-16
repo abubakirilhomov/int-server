@@ -66,6 +66,7 @@ class InternService {
             grade: normalizedGrade,
             mentorsEvaluated: {},
             dateJoined: joinedDate,
+            probationStartDate: joinedDate,
             probationPeriod: gradeConfig.trialPeriod,
             lessonsPerMonth: gradeConfig.lessonsPerMonth,
             pluses: gradeConfig.plus,

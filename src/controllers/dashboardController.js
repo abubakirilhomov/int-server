@@ -1,6 +1,7 @@
 const Lesson = require("../models/lessonModel");
 const User = require("../models/internModel");
 const grades = require("../config/grades");
+const { getInternPlanStatus } = require("../utils/internPlanStatus");
 
 const MAX_SCORE = 5;
 const PROMOTION_THRESHOLD = 50;
@@ -138,6 +139,7 @@ exports.getDashboardStats = async (req, res) => {
 
         // --- Average Score ---
         const averageScore = user.score.toFixed(2) || 0;
+        const planStatus = await getInternPlanStatus(user, now);
 
         // --- Probation Object ---
         let probation = null;
@@ -248,7 +250,8 @@ exports.getDashboardStats = async (req, res) => {
             },
             history: monthlyHistory,
             recentLessons: recentLessonsData,
-            recentReviews: recentReviews
+            recentReviews: recentReviews,
+            planStatus,
         });
 
     } catch (err) {

@@ -9,6 +9,21 @@ const internSchema = new mongoose.Schema({
   lastName: { type: String, required: true, trim: true },
   username: { type: String, required: true, unique: true, trim: true },
   password: { type: String, required: true, minlength: 8 },
+  phoneNumber: { type: String, trim: true, default: "" },
+  telegram: { type: String, trim: true, default: "" },
+  sphere: {
+    type: String,
+    enum: [
+      "backend-nodejs",
+      "backend-python",
+      "frontend-react",
+      "frontend-vue",
+      "mern-stack",
+      "full-stack",
+    ],
+    default: "backend-nodejs",
+  },
+  profilePhoto: { type: String, trim: true, default: "" },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
@@ -67,10 +82,28 @@ const internSchema = new mongoose.Schema({
       consequenceApplied: { type: String, trim: true, default: "" },
       issuedBy: {
         type: String,
-        enum: ["mentor", "headIntern", "admin"],
+        enum: ["mentor", "headIntern", "admin", "branchManager"],
         default: "mentor",
       },
       issuedById: { type: mongoose.Schema.Types.ObjectId },
+    },
+  ],
+  complaints: [
+    {
+      text: { type: String, required: true, trim: true },
+      createdAt: { type: Date, default: Date.now },
+      createdById: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+      createdByName: { type: String, trim: true, default: "" },
+      createdByRole: {
+        type: String,
+        enum: ["branchManager", "admin"],
+        default: "branchManager",
+      },
+      status: {
+        type: String,
+        enum: ["new", "reviewed"],
+        default: "new",
+      },
     },
   ],
   isHeadIntern: { type: Boolean, default: false },

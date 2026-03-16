@@ -2,10 +2,29 @@ const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
 const grades = require("../config/grades.js");
 const { sendNotificationToUser } = require("./notificationController.js");
+const { getInternPlanStatus } = require("../utils/internPlanStatus");
 // Создать урок
 exports.createLesson = async (req, res) => {
   try {
-    const lesson = await Lesson.create(req.body);
+    const payload = { ...req.body };
+
+    if (req.user?.role === "intern") {
+      payload.intern = req.user.id;
+      const intern = await Intern.findById(req.user.id);
+      if (!intern) {
+        return res.status(404).json({ message: "Стажёр не найден" });
+      }
+      const planStatus = await getInternPlanStatus(intern);
+      if (planStatus.isPlanBlocked) {
+        return res.status(403).json({
+          message:
+            "Аккаунт ограничен: недельный план не выполнен. Основные функции временно недоступны.",
+          planStatus,
+        });
+      }
+    }
+
+    const lesson = await Lesson.create(payload);
 
     // После создания урока — обновляем посещения интерна
     if (lesson.intern) {

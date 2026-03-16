@@ -47,6 +47,7 @@ app.use("/api/rules", rulesRoutes);
 app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/uploads", require("./routes/uploadRoutes"));
 
 app.all(/(.*)/, (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));

@@ -4,6 +4,8 @@ const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
 const grades = require("../config/grades");
 const AppError = require("../utils/AppError");
+const bcrypt = require("bcrypt");
+const { getInternPlanStatus } = require("../utils/internPlanStatus");
 
 class InternService {
     async createIntern(data) {
@@ -12,6 +14,10 @@ class InternService {
             lastName,
             username,
             password,
+            phoneNumber,
+            telegram,
+            sphere,
+            profilePhoto,
             branch,
             mentor,
             grade,
@@ -47,6 +53,10 @@ class InternService {
             lastName,
             username,
             password,
+            phoneNumber: phoneNumber || "",
+            telegram: telegram || "",
+            sphere: sphere || "backend-nodejs",
+            profilePhoto: profilePhoto || "",
             branch,
             mentor,
             score: 0,
@@ -217,6 +227,11 @@ class InternService {
             name: intern.name,
             lastName: intern.lastName,
             username: intern.username,
+            phoneNumber: intern.phoneNumber || "",
+            telegram: intern.telegram || "",
+            sphere: intern.sphere || "",
+            profilePhoto: intern.profilePhoto || "",
+            avatar: intern.profilePhoto || "",
             branch: intern.branch,
             mentor: intern.mentor,
             score: intern.score,
@@ -233,12 +248,29 @@ class InternService {
             createdAt: intern.createdAt, // UTC
             createdAtLocal, // Ташкент
             grades,
+            complaints: intern.complaints || [],
+            planStatus: await getInternPlanStatus(intern),
         };
     }
 
     async getInterns(user) {
+        const applyPlanStatus = async (list) => {
+            return Promise.all(
+                list.map(async (intern) => {
+                    const planStatus = await getInternPlanStatus(intern);
+                    return {
+                        ...intern.toObject(),
+                        ...planStatus,
+                    };
+                })
+            );
+        };
+
         if (user?.role === "admin") {
-            return await Intern.find().populate("branch", "name");
+            const interns = await Intern.find()
+                .populate("branch", "name")
+                .populate("mentor", "name lastName");
+            return applyPlanStatus(interns);
         }
 
         const branchId = user?.branchId;
@@ -246,30 +278,154 @@ class InternService {
             throw new AppError("Нет доступа", 403);
         }
 
-        return await Intern.find({ branch: branchId }).populate("branch", "name");
+        const interns = await Intern.find({ branch: branchId })
+            .populate("branch", "name")
+            .populate("mentor", "name lastName");
+        return applyPlanStatus(interns);
     }
 
     async updateIntern(id, updateData) {
-        if (updateData.grade) {
-            const gradeConfig = grades[updateData.grade];
+        const allowedFields = [
+            "name",
+            "lastName",
+            "username",
+            "password",
+            "branch",
+            "mentor",
+            "grade",
+            "dateJoined",
+            "phoneNumber",
+            "telegram",
+            "sphere",
+            "profilePhoto",
+        ];
+
+        const payload = {};
+        allowedFields.forEach((field) => {
+            if (Object.prototype.hasOwnProperty.call(updateData, field)) {
+                payload[field] = updateData[field];
+            }
+        });
+
+        if (payload.password !== undefined && !String(payload.password).trim()) {
+            delete payload.password;
+        }
+
+        if (payload.grade) {
+            const gradeConfig = grades[payload.grade];
             if (!gradeConfig) {
                 throw new AppError(
                     `Недопустимый уровень: ${Object.keys(grades).join(", ")}`,
                     400
                 );
             }
-            updateData.probationPeriod = gradeConfig.trialPeriod;
-            updateData.lessonsPerMonth = gradeConfig.lessonsPerMonth;
-            updateData.pluses = gradeConfig.plus;
+            payload.probationPeriod = gradeConfig.trialPeriod;
+            payload.lessonsPerMonth = gradeConfig.lessonsPerMonth;
+            payload.pluses = gradeConfig.plus;
+            payload.probationStartDate = new Date();
         }
 
-        const intern = await Intern.findByIdAndUpdate(id, updateData, {
-            new: true,
-        });
+        const intern = await Intern.findById(id);
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
+        if (payload.password) {
+            payload.password = await bcrypt.hash(payload.password, 10);
+        }
+
+        Object.assign(intern, payload);
+        await intern.save();
+
         return intern;
+    }
+
+    async updateOwnProfile(internId, updateData) {
+        const intern = await Intern.findById(internId);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        const allowedFields = [
+            "name",
+            "lastName",
+            "username",
+            "phoneNumber",
+            "telegram",
+            "sphere",
+            "profilePhoto",
+        ];
+
+        allowedFields.forEach((field) => {
+            if (Object.prototype.hasOwnProperty.call(updateData, field)) {
+                intern[field] = updateData[field];
+            }
+        });
+
+        await intern.save();
+        return intern;
+    }
+
+    async getBranchManagerInterns(user) {
+        if (!["branchManager", "admin"].includes(user?.role)) {
+            throw new AppError("Доступ только для branch manager или admin", 403);
+        }
+
+        const branchId = user?.branchId;
+        if (!branchId) {
+            throw new AppError("Не найден филиал в токене", 400);
+        }
+
+        const interns = await Intern.find({ branch: branchId })
+            .populate("branch", "name")
+            .populate("mentor", "name lastName profilePhoto")
+            .sort({ createdAt: -1 });
+
+        return Promise.all(
+            interns.map(async (intern) => {
+                const lastLessons = await Lesson.find({ intern: intern._id })
+                    .sort({ date: -1 })
+                    .limit(3)
+                    .populate("mentor", "name lastName profilePhoto");
+
+                const planStatus = await getInternPlanStatus(intern);
+
+                return {
+                    ...intern.toObject(),
+                    ...planStatus,
+                    lastLessons,
+                };
+            })
+        );
+    }
+
+    async addBranchManagerComplaint(user, targetInternId, text) {
+        if (!["branchManager", "admin"].includes(user?.role)) {
+            throw new AppError("Только branch manager или admin может отправлять жалобы", 403);
+        }
+        if (!text || !text.trim()) {
+            throw new AppError("Текст жалобы обязателен", 400);
+        }
+
+        const intern = await Intern.findById(targetInternId).populate("branch", "name");
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (user.role !== "admin" && String(intern.branch._id) !== String(user.branchId)) {
+            throw new AppError("Можно отправлять жалобы только на стажёров своего филиала", 403);
+        }
+
+        intern.complaints.push({
+            text: text.trim(),
+            createdAt: new Date(),
+            createdById: user.id || user._id,
+            createdByName: user.name ? `${user.name} ${user.lastName || ""}`.trim() : "",
+            createdByRole: user.role === "admin" ? "admin" : "branchManager",
+            status: "new",
+        });
+
+        await intern.save();
+
+        return {
+            message: "Жалоба отправлена",
+            complaints: intern.complaints,
+        };
     }
 
     async deleteIntern(id) {

@@ -9,6 +9,7 @@ const grades = require("../config/grades");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const internService = require("../services/internService");
+const { getInternPlanStatus } = require("../utils/internPlanStatus");
 
 exports.loginIntern = async (req, res) => {
   try {
@@ -47,6 +48,7 @@ exports.loginIntern = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
+    const planStatus = await getInternPlanStatus(intern);
 
     res.status(200).json({
       token,
@@ -59,6 +61,13 @@ exports.loginIntern = async (req, res) => {
         role: "intern",
         branchId: intern.branch,
         isHeadIntern: intern.isHeadIntern || false,
+        phoneNumber: intern.phoneNumber || "",
+        telegram: intern.telegram || "",
+        sphere: intern.sphere || "",
+        profilePhoto: intern.profilePhoto || "",
+        avatar: intern.profilePhoto || "",
+        isPlanBlocked: planStatus.isPlanBlocked,
+        planBlockReason: planStatus.reason,
       },
     });
   } catch (error) {
@@ -100,8 +109,8 @@ exports.createIntern = catchAsync(async (req, res, next) => {
 exports.getPendingInterns = async (req, res) => {
   try {
     // Check role from req.user (set by auth middleware)
-    if (req.user?.role !== "mentor") {
-      return res.status(403).json({ error: "Доступ только для менторов" });
+    if (!["mentor", "branchManager"].includes(req.user?.role)) {
+      return res.status(403).json({ error: "Доступ только для менторов и branch manager" });
     }
 
     const mentorId = req.user.id || req.user._id; // Handle both id formats
@@ -138,6 +147,7 @@ exports.getPendingInterns = async (req, res) => {
           grade: intern.grade,
           score: intern.score,
           lessonsVisited: intern.lessonsVisited,
+          profilePhoto: intern.profilePhoto || "",
 
           // Fields from the specific lesson
           lessonId: lesson._id,
@@ -177,6 +187,12 @@ exports.updateIntern = catchAsync(async (req, res) => {
     req.params.id,
     req.body
   );
+  res.json(intern);
+});
+
+exports.updateOwnProfile = catchAsync(async (req, res) => {
+  const internId = req.user?.id || req.user?._id;
+  const intern = await internService.updateOwnProfile(internId, req.body);
   res.json(intern);
 });
 
@@ -258,6 +274,21 @@ exports.headInternWarning = catchAsync(async (req, res, next) => {
     headInternId,
     req.params.id,
     { ruleId, notes }
+  );
+  res.json(result);
+});
+
+exports.getBranchManagerInterns = catchAsync(async (req, res) => {
+  const result = await internService.getBranchManagerInterns(req.user);
+  res.json(result);
+});
+
+exports.addBranchManagerComplaint = catchAsync(async (req, res) => {
+  const { text } = req.body;
+  const result = await internService.addBranchManagerComplaint(
+    req.user,
+    req.params.id,
+    text
   );
   res.json(result);
 });

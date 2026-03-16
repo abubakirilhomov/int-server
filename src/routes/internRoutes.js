@@ -10,9 +10,11 @@ const { createInternSchema } = require('../validations/internValidation');
 router.get('/rating', auth, internCtrl.getInternsRating);
 router.get('/client-rating', auth, internCtrl.getRatings)
 router.get('/pending-interns', auth, internCtrl.getPendingInterns)
+router.get('/branch-manager/interns', auth, internCtrl.getBranchManagerInterns);
 router.post('/', auth, isAdmin, validateRequest(createInternSchema), internCtrl.createIntern);
 router.post('/login', internCtrl.loginIntern);
 router.post("/refresh-token", internCtrl.refreshToken);
+router.patch("/me/profile", auth, internCtrl.updateOwnProfile);
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
@@ -23,5 +25,6 @@ router.patch("/:id/upgrade", auth, internCtrl.upgradeInternGrade);
 router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
 router.patch("/:id/head-intern", auth, isAdmin, internCtrl.setHeadIntern);
 router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
+router.post("/:id/complaints", auth, internCtrl.addBranchManagerComplaint);
 
 module.exports = router;

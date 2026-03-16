@@ -7,7 +7,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 exports.createMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch } = req.body;
+  const { name, lastName, password, branch, role, profilePhoto } = req.body;
   if (!name || !password || !branch) {
     throw new AppError("Name, password and branch are required", 400);
   }
@@ -19,7 +19,9 @@ exports.createMentor = catchAsync(async (req, res) => {
     name,
     lastName,
     password: hashedPassword,
-    branch
+    branch,
+    role: ["mentor", "admin", "branchManager"].includes(role) ? role : "mentor",
+    profilePhoto: profilePhoto || "",
   });
 
   mentor.password = undefined; // Hide password in response
@@ -37,7 +39,7 @@ exports.deleteMentor = catchAsync(async (req, res) => {
 });
 
 exports.updateMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, role } = req.body;
+  const { name, lastName, password, branch, role, profilePhoto } = req.body;
   const { id } = req.params;
 
   // Find the mentor (select password field for potential update)
@@ -50,7 +52,8 @@ exports.updateMentor = catchAsync(async (req, res) => {
   if (name) mentor.name = name;
   if (lastName !== undefined) mentor.lastName = lastName;
   if (branch) mentor.branch = branch;
-  if (role && ['mentor', 'admin'].includes(role)) mentor.role = role;
+  if (role && ['mentor', 'admin', 'branchManager'].includes(role)) mentor.role = role;
+  if (profilePhoto !== undefined) mentor.profilePhoto = profilePhoto;
 
   // Only update password if provided
   if (password && password.trim()) {
@@ -135,7 +138,13 @@ exports.loginMentor = catchAsync(async (req, res) => {
 
   // Generate tokens
   const token = jwt.sign(
-    { id: mentor._id, role: mentor.role, branchId: mentor.branch },
+    {
+      id: mentor._id,
+      role: mentor.role,
+      branchId: mentor.branch,
+      name: mentor.name,
+      lastName: mentor.lastName || "",
+    },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
@@ -153,7 +162,8 @@ exports.loginMentor = catchAsync(async (req, res) => {
       name: mentor.name,
       lastName: mentor.lastName,
       role: mentor.role,
-      branchId: mentor.branch
+      branchId: mentor.branch,
+      profilePhoto: mentor.profilePhoto || "",
     }
   });
 });
@@ -164,9 +174,17 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
 
   try {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+    const mentor = await Mentor.findById(decoded.id || decoded._id);
+    if (!mentor) throw new AppError("Mentor not found", 404);
 
     const newToken = jwt.sign(
-      { id: decoded.id, role: "mentor" }, // Defaulting to mentor role, logic can be refined
+      {
+        id: mentor._id,
+        role: mentor.role,
+        branchId: mentor.branch,
+        name: mentor.name,
+        lastName: mentor.lastName || "",
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );

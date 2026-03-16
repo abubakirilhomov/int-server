@@ -15,6 +15,19 @@ const createInternSchema = Joi.object({
         "any.required": "Пароль обязателен",
         "string.min": "Пароль должен содержать минимум 8 символов",
     }),
+    phoneNumber: Joi.string().allow("").optional(),
+    telegram: Joi.string().allow("").optional(),
+    sphere: Joi.string()
+        .valid(
+            "backend-nodejs",
+            "backend-python",
+            "frontend-react",
+            "frontend-vue",
+            "mern-stack",
+            "full-stack"
+        )
+        .default("backend-nodejs"),
+    profilePhoto: Joi.string().uri().allow("").optional(),
     branch: Joi.string().required().messages({
         "any.required": "ID филиала обязателен",
     }),

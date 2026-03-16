@@ -179,8 +179,7 @@ internSchema.methods.isHeadInternAt = function (branchId) {
   );
 };
 
-// Indexes
-internSchema.index({ username: 1 });
+// Indexes (username already indexed via unique:true in schema definition)
 internSchema.index({ "branches.branch": 1 });
 internSchema.index({ "branches.mentor": 1 });
 

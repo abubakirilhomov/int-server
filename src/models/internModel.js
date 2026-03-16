@@ -106,6 +106,12 @@ const internSchema = new mongoose.Schema({
       },
     },
   ],
+  manualActivation: {
+    isEnabled: { type: Boolean, default: false },
+    enabledAt: { type: Date },
+    enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+    note: { type: String, trim: true, default: "" },
+  },
   isHeadIntern: { type: Boolean, default: false },
   bonusLessons: [
     {

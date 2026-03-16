@@ -428,6 +428,31 @@ class InternService {
         };
     }
 
+    async setInternActivation(id, { isEnabled, note, adminId }) {
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (typeof isEnabled !== "boolean") {
+            throw new AppError("Поле isEnabled должно быть boolean", 400);
+        }
+
+        intern.manualActivation = {
+            isEnabled,
+            enabledAt: isEnabled ? new Date() : null,
+            enabledBy: isEnabled ? adminId : null,
+            note: isEnabled ? (note || "") : "",
+        };
+
+        await intern.save();
+
+        return {
+            message: isEnabled
+                ? "Аккаунт стажёра активирован вручную"
+                : "Ручная активация отключена",
+            intern,
+        };
+    }
+
     async deleteIntern(id) {
         await Intern.findByIdAndDelete(id);
     }

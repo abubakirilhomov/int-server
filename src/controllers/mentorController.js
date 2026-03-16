@@ -98,11 +98,16 @@ exports.resetPassword = catchAsync(async (req, res) => {
 });
 
 exports.loginMentor = catchAsync(async (req, res) => {
-  const { name, password } = req.body;
+  const { name, lastName, password } = req.body;
   if (!name || !password) throw new AppError("Name and password required", 400);
 
+  const query = { name: String(name).trim() };
+  if (lastName && String(lastName).trim()) {
+    query.lastName = String(lastName).trim();
+  }
+
   // 1. Находим всех менторов с таким именем (explicitly select password)
-  const mentors = await Mentor.find({ name }).select('+password');
+  const mentors = await Mentor.find(query).select('+password');
 
   if (!mentors || mentors.length === 0) {
     throw new AppError("Invalid credentials", 401);

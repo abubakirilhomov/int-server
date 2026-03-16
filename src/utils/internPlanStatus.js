@@ -21,6 +21,22 @@ const getMonthBounds = (date = new Date()) => {
 const getWeeklyTarget = (lessonsPerMonth = 24) =>
   Math.max(1, Math.ceil(Number(lessonsPerMonth) / 4));
 
+const isSunday = (date) => new Date(date).getDay() === 0;
+
+const countWorkingDaysInclusive = (from, to) => {
+  const start = startOfDay(from);
+  const end = startOfDay(to);
+  if (start > end) return 0;
+
+  let count = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    if (!isSunday(cursor)) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+};
+
 const getCompletedWeeksInMonth = (date = new Date()) => {
   const dayOfMonth = date.getDate();
   const currentWeekIndex = Math.ceil(dayOfMonth / 7);
@@ -43,7 +59,21 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
   const { start, end } = getMonthBounds(referenceDate);
   const completedWeeksInMonth = getCompletedWeeksInMonth(referenceDate);
   const weeklyTarget = getWeeklyTarget(intern.lessonsPerMonth);
-  const requiredLessonsByNow = completedWeeksInMonth * weeklyTarget;
+
+  const startWorkDate = intern.probationStartDate || intern.dateJoined || intern.createdAt || start;
+  const effectiveStart = startWorkDate > start ? startOfDay(startWorkDate) : start;
+  const effectiveEnd = referenceDate < end ? referenceDate : end;
+
+  const elapsedWorkingDays = countWorkingDaysInclusive(effectiveStart, effectiveEnd);
+  const totalWorkingDaysInWindow = countWorkingDaysInclusive(effectiveStart, end);
+
+  const requiredLessonsByNow =
+    totalWorkingDaysInWindow > 0
+      ? Math.ceil(
+          (elapsedWorkingDays / totalWorkingDaysInWindow) *
+            Number(intern.lessonsPerMonth || 0)
+        )
+      : 0;
 
   const confirmedLessonsCount = await Lesson.countDocuments({
     intern: intern._id,
@@ -65,16 +95,31 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
   return {
     isPlanBlocked,
     reason: isPlanBlocked
-      ? `План за текущий месяц отстаёт на ${deficit} урок(а/ов).`
+      ? `План к текущей дате отстаёт на ${deficit} урок(а/ов).`
       : "",
     weeklyTarget,
     completedWeeksInMonth,
     requiredLessonsByNow,
     confirmedLessonsThisMonth,
     deficit,
+    isManuallyActivated: false,
+    elapsedWorkingDays,
+    totalWorkingDaysInWindow,
   };
 }
 
 module.exports = {
   getInternPlanStatus,
 };
+  if (intern.manualActivation?.isEnabled) {
+    return {
+      isPlanBlocked: false,
+      reason: "Аккаунт активирован администратором вручную.",
+      weeklyTarget: getWeeklyTarget(intern.lessonsPerMonth),
+      completedWeeksInMonth: getCompletedWeeksInMonth(referenceDate),
+      requiredLessonsByNow: 0,
+      confirmedLessonsThisMonth: 0,
+      deficit: 0,
+      isManuallyActivated: true,
+    };
+  }

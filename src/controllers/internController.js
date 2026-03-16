@@ -292,3 +292,13 @@ exports.addBranchManagerComplaint = catchAsync(async (req, res) => {
   );
   res.json(result);
 });
+
+exports.setInternActivation = catchAsync(async (req, res) => {
+  const { isEnabled, note } = req.body;
+  const result = await internService.setInternActivation(req.params.id, {
+    isEnabled,
+    note,
+    adminId: req.user?.id || req.user?._id,
+  });
+  res.json(result);
+});

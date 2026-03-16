@@ -18,7 +18,7 @@ exports.createLesson = async (req, res) => {
       if (planStatus.isPlanBlocked) {
         return res.status(403).json({
           message:
-            "Аккаунт ограничен: недельный план не выполнен. Основные функции временно недоступны.",
+            "Аккаунт ограничен: план к текущей дате не выполнен. Основные функции временно недоступны.",
           planStatus,
         });
       }

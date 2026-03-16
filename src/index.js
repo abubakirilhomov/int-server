@@ -11,7 +11,7 @@ const envSchema = Joi.object({
   PORT:                Joi.number().default(3000),
   NODE_ENV:            Joi.string().valid("development", "production", "test").default("development"),
   CORS_ORIGINS:        Joi.string().optional(), // comma-separated list
-}).unknown(true); // allow other env vars (CLOUDINARY etc.)
+}).unknown(true);
 
 const { error: envError } = envSchema.validate(process.env);
 if (envError) {

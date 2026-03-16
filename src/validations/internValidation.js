@@ -28,12 +28,17 @@ const createInternSchema = Joi.object({
         )
         .default("backend-nodejs"),
     profilePhoto: Joi.string().uri().allow("").optional(),
-    branch: Joi.string().required().messages({
-        "any.required": "ID филиала обязателен",
-    }),
-    mentor: Joi.string().required().messages({
-        "any.required": "ID ментора обязателен",
-    }),
+    // Legacy single-branch format
+    branch: Joi.string().optional(),
+    mentor: Joi.string().optional(),
+    // New multi-branch format
+    branches: Joi.array().items(
+        Joi.object({
+            branch: Joi.string().required(),
+            mentor: Joi.string().required(),
+            isHeadIntern: Joi.boolean().default(false),
+        })
+    ).optional(),
     grade: Joi.string()
         .valid("junior", "strongJunior", "middle", "strongMiddle", "senior")
         .default("junior"),

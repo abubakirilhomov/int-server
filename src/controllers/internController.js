@@ -37,15 +37,16 @@ exports.loginIntern = async (req, res) => {
       {
         id: intern._id,
         role: "intern",
-        branchId: intern.branch,
-        isHeadIntern: intern.isHeadIntern || false,
+        branchIds: intern.branches.map((b) => b.branch),
+        branchId: intern.branches[0]?.branch || null,
+        isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
     const refreshToken = jwt.sign(
-      { _id: intern._id },
-      process.env.JWT_SECRET,
+      { id: intern._id },
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
     const planStatus = await getInternPlanStatus(intern);
@@ -59,8 +60,9 @@ exports.loginIntern = async (req, res) => {
         lastName: intern.lastName,
         username: intern.username,
         role: "intern",
-        branchId: intern.branch,
-        isHeadIntern: intern.isHeadIntern || false,
+        branchIds: intern.branches.map((b) => b.branch),
+        branchId: intern.branches[0]?.branch || null,
+        isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
         phoneNumber: intern.phoneNumber || "",
         telegram: intern.telegram || "",
         sphere: intern.sphere || "",
@@ -82,12 +84,21 @@ exports.refreshToken = async (req, res) => {
     if (!refreshToken)
       return res.status(401).json({ error: "Refresh token required" });
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
+    );
+
+    const intern = await Intern.findById(decoded.id);
+    if (!intern) return res.status(404).json({ error: "Intern not found" });
 
     const newToken = jwt.sign(
       {
-        _id: decoded._id,
+        id: intern._id,
         role: "intern",
+        branchIds: intern.branches.map((b) => b.branch),
+        branchId: intern.branches[0]?.branch || null,
+        isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
@@ -119,8 +130,8 @@ exports.getPendingInterns = async (req, res) => {
     const interns = await Intern.find({
       "pendingMentors.mentorId": mentorId,
     })
-      .populate("branch", "name")
-      .populate("mentor", "name lastName")
+      .populate("branches.branch", "name")
+      .populate("branches.mentor", "name lastName")
       .populate("pendingMentors.lessonId", "topic date time group");
 
     // Transform data to flatten the structure for frontend (InternCard expects topic, time, lessonId at root)
@@ -143,7 +154,8 @@ exports.getPendingInterns = async (req, res) => {
           _id: intern._id,
           name: intern.name,
           lastName: intern.lastName,
-          branch: intern.branch,
+          branch: intern.branches[0]?.branch || null,
+          branches: intern.branches,
           grade: intern.grade,
           score: intern.score,
           lessonsVisited: intern.lessonsVisited,
@@ -262,8 +274,8 @@ exports.addBonusLessons = catchAsync(async (req, res, next) => {
 });
 
 exports.setHeadIntern = catchAsync(async (req, res, next) => {
-  const { isHeadIntern } = req.body;
-  const result = await internService.setHeadIntern(req.params.id, isHeadIntern);
+  const { isHeadIntern, branchId } = req.body;
+  const result = await internService.setHeadIntern(req.params.id, isHeadIntern, branchId);
   res.json(result);
 });
 
@@ -300,4 +312,25 @@ exports.setInternActivation = catchAsync(async (req, res) => {
     adminId: req.user?.id || req.user?._id,
   });
   res.json(result);
+});
+
+exports.changePassword = catchAsync(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    throw new AppError("currentPassword and newPassword are required", 400);
+  }
+  if (newPassword.length < 6) {
+    throw new AppError("New password must be at least 6 characters", 400);
+  }
+
+  const intern = await Intern.findById(req.user.id).select("+password");
+  if (!intern) throw new AppError("Intern not found", 404);
+
+  const isMatch = await bcrypt.compare(currentPassword, intern.password);
+  if (!isMatch) throw new AppError("Current password is incorrect", 401);
+
+  intern.password = newPassword; // pre-save hook will hash it
+  await intern.save();
+
+  res.json({ success: true, message: "Password changed successfully" });
 });

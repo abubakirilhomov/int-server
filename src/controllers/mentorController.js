@@ -7,10 +7,17 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 exports.createMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, role, profilePhoto } = req.body;
-  if (!name || !password || !branch) {
-    throw new AppError("Name, password and branch are required", 400);
+  const { name, lastName, password, branch, branches, role, profilePhoto } = req.body;
+  if (!name || !password) {
+    throw new AppError("Name and password are required", 400);
   }
+
+  // Support both: single branch (legacy) and branches array
+  const branchList = branches
+    ? branches
+    : branch
+    ? [branch]
+    : [];
 
   // Hash password manually since model doesn't seem to have pre-save hook for it based on verification
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -19,7 +26,7 @@ exports.createMentor = catchAsync(async (req, res) => {
     name,
     lastName,
     password: hashedPassword,
-    branch,
+    branches: branchList,
     role: ["mentor", "admin", "branchManager"].includes(role) ? role : "mentor",
     profilePhoto: profilePhoto || "",
   });
@@ -29,7 +36,7 @@ exports.createMentor = catchAsync(async (req, res) => {
 });
 
 exports.getMentors = catchAsync(async (req, res) => {
-  const mentors = await Mentor.find().populate("branch", "name");
+  const mentors = await Mentor.find().populate("branches", "name");
   res.json(mentors);
 });
 
@@ -39,7 +46,7 @@ exports.deleteMentor = catchAsync(async (req, res) => {
 });
 
 exports.updateMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, role, profilePhoto } = req.body;
+  const { name, lastName, password, branch, branches, role, profilePhoto } = req.body;
   const { id } = req.params;
 
   // Find the mentor (select password field for potential update)
@@ -51,7 +58,12 @@ exports.updateMentor = catchAsync(async (req, res) => {
   // Update fields
   if (name) mentor.name = name;
   if (lastName !== undefined) mentor.lastName = lastName;
-  if (branch) mentor.branch = branch;
+  // Support both: single branch (legacy) and branches array
+  if (branches) {
+    mentor.branches = branches;
+  } else if (branch) {
+    mentor.branches = [branch];
+  }
   if (role && ['mentor', 'admin', 'branchManager'].includes(role)) mentor.role = role;
   if (profilePhoto !== undefined) mentor.profilePhoto = profilePhoto;
 
@@ -62,8 +74,8 @@ exports.updateMentor = catchAsync(async (req, res) => {
 
   await mentor.save();
 
-  // Populate branch and hide password
-  const updatedMentor = await Mentor.findById(id).populate("branch", "name");
+  // Populate branches and hide password
+  const updatedMentor = await Mentor.findById(id).populate("branches", "name");
 
   res.json(updatedMentor);
 });
@@ -115,25 +127,12 @@ exports.loginMentor = catchAsync(async (req, res) => {
 
   let mentor = null;
 
-  // 2. Перебираем кандидатов
+  // 2. Перебираем кандидатов — только bcrypt, plain-text fallback удалён
   for (const candidate of mentors) {
-    // А. Пробуем сравнить как хеш
-    let isMatch = await bcrypt.compare(password, candidate.password);
-
-    // Б. Если не подошло, пробуем сравнить как обычный текст (для старых аккаунтов)
-    if (!isMatch) {
-      if (password === candidate.password) {
-        isMatch = true;
-
-        // (Опционально) Можно здесь автоматически обновить пароль на хеш
-        // candidate.password = await bcrypt.hash(password, 10);
-        // await candidate.save();
-      }
-    }
-
+    const isMatch = await bcrypt.compare(password, candidate.password);
     if (isMatch) {
       mentor = candidate;
-      break; // Нашли нужного, выходим из цикла
+      break;
     }
   }
 
@@ -146,7 +145,8 @@ exports.loginMentor = catchAsync(async (req, res) => {
     {
       id: mentor._id,
       role: mentor.role,
-      branchId: mentor.branch,
+      branchIds: mentor.branches || [],
+      branchId: mentor.branches?.[0] || null,
       name: mentor.name,
       lastName: mentor.lastName || "",
     },
@@ -167,7 +167,8 @@ exports.loginMentor = catchAsync(async (req, res) => {
       name: mentor.name,
       lastName: mentor.lastName,
       role: mentor.role,
-      branchId: mentor.branch,
+      branchIds: mentor.branches || [],
+      branchId: mentor.branches?.[0] || null,
       profilePhoto: mentor.profilePhoto || "",
     }
   });
@@ -186,7 +187,8 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
       {
         id: mentor._id,
         role: mentor.role,
-        branchId: mentor.branch,
+        branchIds: mentor.branches || [],
+        branchId: mentor.branches?.[0] || null,
         name: mentor.name,
         lastName: mentor.lastName || "",
       },
@@ -222,4 +224,25 @@ exports.getMentorDebtDetails = catchAsync(async (req, res) => {
     success: true,
     data: debtDetails,
   });
+});
+
+exports.changePassword = catchAsync(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    throw new AppError("currentPassword and newPassword are required", 400);
+  }
+  if (newPassword.length < 6) {
+    throw new AppError("New password must be at least 6 characters", 400);
+  }
+
+  const mentor = await Mentor.findById(req.user.id).select("+password");
+  if (!mentor) throw new AppError("Mentor not found", 404);
+
+  const isMatch = await bcrypt.compare(currentPassword, mentor.password);
+  if (!isMatch) throw new AppError("Current password is incorrect", 401);
+
+  mentor.password = await bcrypt.hash(newPassword, 10);
+  await mentor.save();
+
+  res.json({ success: true, message: "Password changed successfully" });
 });

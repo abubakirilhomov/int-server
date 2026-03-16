@@ -21,19 +21,28 @@ class InternService {
             profilePhoto,
             branch,
             mentor,
+            branches,   // new: array format [{ branch, mentor, isHeadIntern }]
             grade,
             dateJoined,
             lessonsVisitedFake,
         } = data;
 
-        const branchExists = await Branch.findById(branch);
-        if (!branchExists) {
-            throw new AppError("Указанный филиал не найден", 400);
+        // Normalize to branches array (support both legacy and new format)
+        let branchList;
+        if (branches && Array.isArray(branches) && branches.length > 0) {
+            branchList = branches;
+        } else if (branch && mentor) {
+            branchList = [{ branch, mentor, isHeadIntern: false }];
+        } else {
+            throw new AppError("Необходимо указать филиал и ментора", 400);
         }
 
-        const mentorExists = await Mentor.findById(mentor);
-        if (!mentorExists) {
-            throw new AppError("Указанный ментор не найден", 400);
+        // Validate all branches/mentors
+        for (const entry of branchList) {
+            const branchExists = await Branch.findById(entry.branch);
+            if (!branchExists) throw new AppError(`Филиал ${entry.branch} не найден`, 400);
+            const mentorExists = await Mentor.findById(entry.mentor);
+            if (!mentorExists) throw new AppError(`Ментор ${entry.mentor} не найден`, 400);
         }
 
         const existingUser = await Intern.findOne({ username });
@@ -58,8 +67,12 @@ class InternService {
             telegram: telegram || "",
             sphere: sphere || "backend-nodejs",
             profilePhoto: profilePhoto || "",
-            branch,
-            mentor,
+            branches: branchList.map((b) => ({
+                branch: b.branch,
+                mentor: b.mentor,
+                isHeadIntern: b.isHeadIntern || false,
+                joinedAt: joinedDate,
+            })),
             score: 0,
             feedbacks: [],
             lessonsVisited: [],
@@ -104,8 +117,8 @@ class InternService {
 
     async getRatings() {
         const interns = await Intern.find()
-            .populate("branch", "name")
-            .populate("mentor", "name");
+            .populate("branches.branch", "name")
+            .populate("branches.mentor", "name");
 
         const internRatings = interns.map((intern) => {
             const feedbacks = intern.feedbacks || [];
@@ -135,7 +148,7 @@ class InternService {
             return {
                 internId: intern._id,
                 name: `${intern.name} ${intern.lastName}`,
-                branch: intern.branch?.name || "No branch",
+                branch: intern.branches?.map((b) => b.branch?.name).filter(Boolean).join(", ") || "No branch",
                 grade: intern.grade,
                 averageStars: +averageStars.toFixed(2),
                 activityRate: +activityRate.toFixed(2),
@@ -179,8 +192,8 @@ class InternService {
         // 🔹 Если админ и указан ID → можно смотреть чужой профиль
         if (user?.role === "admin" && id) {
             intern = await Intern.findById(id)
-                .populate("branch", "name")
-                .populate("mentor", "name lastName");
+                .populate("branches.branch", "name")
+                .populate("branches.mentor", "name lastName");
         } else {
             const internId = user?._id || id;
             if (!internId) {
@@ -188,8 +201,8 @@ class InternService {
             }
 
             intern = await Intern.findById(internId)
-                .populate("branch", "name")
-                .populate("mentor", "name lastName");
+                .populate("branches.branch", "name")
+                .populate("branches.mentor", "name lastName");
         }
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
@@ -234,8 +247,9 @@ class InternService {
             sphere: intern.sphere || "",
             profilePhoto: intern.profilePhoto || "",
             avatar: intern.profilePhoto || "",
-            branch: intern.branch,
-            mentor: intern.mentor,
+            branches: intern.branches,
+            branch: intern.branches?.[0]?.branch || null,
+            mentor: intern.branches?.[0]?.mentor || null,
             score: intern.score,
             grade: intern.grade,
             goal,
@@ -270,19 +284,19 @@ class InternService {
 
         if (user?.role === "admin") {
             const interns = await Intern.find()
-                .populate("branch", "name")
-                .populate("mentor", "name lastName");
+                .populate("branches.branch", "name")
+                .populate("branches.mentor", "name lastName");
             return applyPlanStatus(interns);
         }
 
-        const branchId = user?.branchId;
+        const branchId = user?.activeBranchId || user?.branchId;
         if (!branchId) {
             throw new AppError("Нет доступа", 403);
         }
 
-        const interns = await Intern.find({ branch: branchId })
-            .populate("branch", "name")
-            .populate("mentor", "name lastName");
+        const interns = await Intern.find({ "branches.branch": branchId })
+            .populate("branches.branch", "name")
+            .populate("branches.mentor", "name lastName");
         return applyPlanStatus(interns);
     }
 
@@ -292,8 +306,7 @@ class InternService {
             "lastName",
             "username",
             "password",
-            "branch",
-            "mentor",
+            "branches",
             "grade",
             "dateJoined",
             "phoneNumber",
@@ -370,14 +383,14 @@ class InternService {
             throw new AppError("Доступ только для branch manager или admin", 403);
         }
 
-        const branchId = user?.branchId;
+        const branchId = user?.activeBranchId || user?.branchId;
         if (!branchId) {
             throw new AppError("Не найден филиал в токене", 400);
         }
 
-        const interns = await Intern.find({ branch: branchId })
-            .populate("branch", "name")
-            .populate("mentor", "name lastName profilePhoto")
+        const interns = await Intern.find({ "branches.branch": branchId })
+            .populate("branches.branch", "name")
+            .populate("branches.mentor", "name lastName profilePhoto")
             .sort({ createdAt: -1 });
 
         return Promise.all(
@@ -410,10 +423,11 @@ class InternService {
             throw new AppError("Добавьте текст жалобы или выберите правило", 400);
         }
 
-        const intern = await Intern.findById(targetInternId).populate("branch", "name");
+        const intern = await Intern.findById(targetInternId).populate("branches.branch", "name");
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
-        if (user.role !== "admin" && String(intern.branch._id) !== String(user.branchId)) {
+        const activeBranchId = user.activeBranchId || user.branchId;
+        if (user.role !== "admin" && !intern.isInBranch(activeBranchId)) {
             throw new AppError("Можно отправлять жалобы только на стажёров своего филиала", 403);
         }
 
@@ -601,24 +615,36 @@ class InternService {
         }
 
         // 4. Лимит на занятия со своим ментором (30% в месяц)
-        if (intern.mentor.toString() === mentorId) {
-            // Считаем уроки в этом месяце
+        // "Своим" считается любой ментор из intern.branches
+        const isOwnMentor = intern.branches.some(
+            (b) => b.mentor.toString() === mentorId.toString()
+        );
+        if (isOwnMentor) {
             const startOfMonth = new Date(lessonDate.getFullYear(), lessonDate.getMonth(), 1);
             const endOfMonth = new Date(lessonDate.getFullYear(), lessonDate.getMonth() + 1, 0);
 
             const monthlyLessons = await Lesson.find({
                 intern: intern._id,
-                date: { $gte: startOfMonth, $lte: endOfMonth }
+                date: { $gte: startOfMonth, $lte: endOfMonth },
             });
 
             const totalMonthly = monthlyLessons.length;
-            const ownMentorLessons = monthlyLessons.filter(l => l.mentor.toString() === intern.mentor.toString()).length;
+            const ownMentorIds = intern.branches.map((b) => b.mentor.toString());
+            const ownMentorLessons = monthlyLessons.filter(
+                (l) => ownMentorIds.includes(l.mentor.toString())
+            ).length;
 
             // +1 так как мы сейчас добавляем урок
             if ((ownMentorLessons + 1) / (totalMonthly + 1) > 0.3) {
                 throw new AppError("Превышен лимит занятий со своим ментором (макс. 30%)", 400);
             }
         }
+
+        // Определяем филиал по ментору
+        const branchEntry = intern.branches.find(
+            (b) => b.mentor.toString() === mentorId.toString()
+        );
+        const lessonBranch = branchEntry?.branch || intern.branches[0]?.branch || null;
 
         // Создаём Lesson со статусом pending
         const lesson = await Lesson.create({
@@ -628,7 +654,8 @@ class InternService {
             time: time || "00:00",
             date: lessonDate,
             group: group || "General",
-            status: "pending"
+            status: "pending",
+            branch: lessonBranch,
         });
 
         // Добавляем в lessonsVisited
@@ -738,24 +765,36 @@ class InternService {
         };
     }
 
-    async setHeadIntern(id, isHeadIntern) {
-        const intern = await Intern.findById(id).populate("branch", "name");
+    async setHeadIntern(id, isHeadIntern, branchId) {
+        const intern = await Intern.findById(id).populate("branches.branch", "name");
         if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        // Determine which branch to update
+        const targetBranchId = branchId || intern.branches[0]?.branch?._id;
+        if (!targetBranchId) throw new AppError("Филиал не найден", 400);
 
         if (isHeadIntern) {
             // Remove head intern status from others in the same branch
             await Intern.updateMany(
-                { branch: intern.branch._id, _id: { $ne: intern._id } },
-                { $set: { isHeadIntern: false } }
+                { "branches.branch": targetBranchId, _id: { $ne: intern._id } },
+                { $set: { "branches.$[elem].isHeadIntern": false } },
+                { arrayFilters: [{ "elem.branch": targetBranchId }] }
             );
         }
 
-        intern.isHeadIntern = Boolean(isHeadIntern);
+        // Update the specific branch entry
+        const branchEntry = intern.branches.find(
+            (b) => b.branch._id.toString() === targetBranchId.toString()
+        );
+        if (!branchEntry) throw new AppError("Стажёр не состоит в этом филиале", 400);
+        branchEntry.isHeadIntern = Boolean(isHeadIntern);
+
         await intern.save();
 
+        const branchName = branchEntry.branch?.name || targetBranchId;
         return {
             message: isHeadIntern
-                ? `${intern.name} ${intern.lastName} назначен Head Intern в филиале ${intern.branch?.name}`
+                ? `${intern.name} ${intern.lastName} назначен Head Intern в филиале ${branchName}`
                 : `${intern.name} ${intern.lastName} снят с должности Head Intern`,
             intern,
         };
@@ -766,14 +805,22 @@ class InternService {
 
         const headIntern = await Intern.findById(headInternId);
         if (!headIntern) throw new AppError("Стажёр не найден", 404);
-        if (!headIntern.isHeadIntern) {
+        // Check if head intern in any branch
+        if (!headIntern.branches.some((b) => b.isHeadIntern)) {
             throw new AppError("Только Head Intern может выдавать предупреждения", 403);
         }
 
         const targetIntern = await Intern.findById(targetInternId);
         if (!targetIntern) throw new AppError("Целевой стажёр не найден", 404);
 
-        if (headIntern.branch.toString() !== targetIntern.branch.toString()) {
+        // Check if they share at least one branch where headIntern is actually head
+        const headBranchIds = headIntern.branches
+            .filter((b) => b.isHeadIntern)
+            .map((b) => b.branch.toString());
+        const targetBranchIds = targetIntern.branches.map((b) => b.branch.toString());
+        const sharedBranch = headBranchIds.some((id) => targetBranchIds.includes(id));
+
+        if (!sharedBranch) {
             throw new AppError("Head Intern может выдавать предупреждения только интернам своего филиала", 403);
         }
 
@@ -799,8 +846,8 @@ class InternService {
 
     async getInternsRating() {
         const interns = await Intern.find()
-            .populate("branch", "name")
-            .populate("mentor", "name lastName");
+            .populate("branches.branch", "name")
+            .populate("branches.mentor", "name lastName");
 
         const now = new Date();
         const currentMonth = now.getMonth() + 1; // Yanvar = 1
@@ -828,8 +875,9 @@ class InternService {
                     _id: intern._id,
                     name: intern.name,
                     lastName: intern.lastName,
-                    branch: intern.branch,
-                    mentor: intern.mentor,
+                    branches: intern.branches,
+                    branch: intern.branches?.[0]?.branch || null,
+                    mentor: intern.branches?.[0]?.mentor || null,
                     grade: intern.grade,
                     score: intern.score,
                     attendance: "N/A",
@@ -852,8 +900,9 @@ class InternService {
                 _id: intern._id,
                 name: intern.name,
                 lastName: intern.lastName,
-                branch: intern.branch,
-                mentor: intern.mentor,
+                branches: intern.branches,
+                branch: intern.branches?.[0]?.branch || null,
+                mentor: intern.branches?.[0]?.mentor || null,
                 grade: intern.grade,
                 score: intern.score,
                 attendance: (attendance * 100).toFixed(1) + "%",

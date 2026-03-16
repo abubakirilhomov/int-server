@@ -57,7 +57,7 @@ exports.getDashboardStats = async (req, res) => {
                 {
                     $match: {
                         intern: user._id,
-                        $or: [{ status: "confirmed" }, { status: undefined, isRated: true }]
+                        status: "confirmed"
                     }
                 },
                 {
@@ -83,10 +83,10 @@ exports.getDashboardStats = async (req, res) => {
 
         // --- Process Current Month ---
         const lessonsConfirmedRaw = monthLessonsData.filter(l =>
-            l.status === "confirmed" || (l.status === undefined && l.isRated)
+            l.status === "confirmed"
         ).length;
         const lessonsPending = monthLessonsData.filter(l =>
-            l.status === "pending" || (l.status === undefined && !l.isRated)
+            l.status === "pending"
         ).length;
 
         const bonusThisMonth = bonusLessons.reduce((sum, bonus) => {
@@ -108,7 +108,7 @@ exports.getDashboardStats = async (req, res) => {
 
         // --- Process Trial Period ---
         const trialLessonsConfirmedRaw = trialLessonsData.filter(l =>
-            l.status === "confirmed" || (l.status === undefined && l.isRated)
+            l.status === "confirmed"
         ).length;
         const trialBonusLessons = bonusLessons.reduce((sum, bonus) => {
             const bonusDate = bonus?.date ? new Date(bonus.date) : null;

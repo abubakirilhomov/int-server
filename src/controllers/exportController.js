@@ -6,7 +6,7 @@ exports.createIntern = async (req, res) => {
 };
 
 exports.getInterns = async (req, res) => {
-  const filter = req.query.branch ? { branch: req.query.branch } : {};
+  const filter = req.query.branch ? { "branches.branch": req.query.branch } : {};
   const interns = await Intern.find(filter);
   res.json(interns);
 };
@@ -25,7 +25,6 @@ exports.rateIntern = async (req, res) => {
   const { mentorId, stars, feedback } = req.body;
   const intern = await Intern.findById(req.params.id);
   const now = new Date();
-  console.log(mentorId, stars, feedback, intern, "ExportController")
   const lastFeedback = intern.feedbacks.find(fb =>
     fb.mentorId.toString() === mentorId &&
     new Date(fb.date).getMonth() === now.getMonth() &&

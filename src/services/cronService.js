@@ -101,8 +101,68 @@ class CronService {
     }
 
     async notifyInternsWithPendingLessons() {
-        // Логика напоминания интернам (если нужно в будущем)
-        console.log("💡 Notifying interns about pending lessons (placeholder)");
+        try {
+            // Считаем дату 3 рабочих дня назад (воскресенье не считается)
+            const cutoff = new Date();
+            cutoff.setHours(0, 0, 0, 0);
+            let workingDaysBack = 0;
+            while (workingDaysBack < 3) {
+                cutoff.setDate(cutoff.getDate() - 1);
+                if (cutoff.getDay() !== 0) workingDaysBack++; // 0 = Sunday
+            }
+
+            // Интерны, у которых есть хотя бы один урок за последние 3 рабочих дня
+            const activeInternIds = await Lesson.find({
+                date: { $gte: cutoff },
+            }).distinct("intern");
+
+            // Все интерны с push-подписками, кроме активных
+            const subscriptions = await Subscription.find({
+                userType: { $in: ["intern", "Intern"] },
+                userId: { $nin: activeInternIds },
+            });
+
+            if (subscriptions.length === 0) {
+                console.log("✅ All subscribed interns are active — no reminders needed");
+                return;
+            }
+
+            // Группируем подписки по internId для одного лога на интерна
+            const byIntern = {};
+            for (const sub of subscriptions) {
+                const id = sub.userId.toString();
+                if (!byIntern[id]) byIntern[id] = [];
+                byIntern[id].push(sub);
+            }
+
+            console.log(`📊 Found ${Object.keys(byIntern).length} inactive interns to notify`);
+
+            const payload = JSON.stringify({
+                title: "📅 Не забудь добавить урок",
+                body: "Ты не добавлял уроки последние 3 рабочих дня. Не отставай от плана!",
+            });
+
+            for (const [internId, subs] of Object.entries(byIntern)) {
+                for (const sub of subs) {
+                    try {
+                        await webpush.sendNotification(
+                            { endpoint: sub.endpoint, keys: sub.keys },
+                            payload
+                        );
+                        console.log(`✅ Reminder sent to intern ${internId}`);
+                    } catch (err) {
+                        if (err.statusCode === 410 || err.statusCode === 404) {
+                            console.warn(`⚠️ Removing expired subscription for intern ${internId}`);
+                            await Subscription.deleteOne({ _id: sub._id });
+                        } else {
+                            console.error(`❌ Failed to send push to intern ${internId}:`, err.message);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("❌ Error in notifyInternsWithPendingLessons:", error);
+        }
     }
 
     async resetExpiredManualActivations() {

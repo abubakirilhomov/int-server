@@ -26,12 +26,13 @@ const lessonSchema = new mongoose.Schema(
       enum: ["pending", "confirmed"],
       default: "pending",
     },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
   },
   { timestamps: true }
 );
 
 
-// Индекс для оптимизации запросов по статистике
-lessonSchema.index({ date: 1, intern: 1 });
+// Индексы для оптимизации запросов по статистике
+lessonSchema.index({ date: 1, intern: 1, branch: 1 });
 
 module.exports = mongoose.model("Lesson", lessonSchema);

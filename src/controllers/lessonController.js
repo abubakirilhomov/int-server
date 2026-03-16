@@ -115,7 +115,6 @@ exports.getPendingLessons = async (req, res) => {
         date: l.date,
         group: l.group,
       }));
-    console.log(interns);
     res.json(interns);
   } catch (error) {
     res.status(500).json({ message: "Ошибка при получении уроков" });
@@ -176,7 +175,7 @@ exports.getAttendanceStats = async (req, res) => {
 
     // 🔹 Получаем всех интернов и их уроки
     const interns = await Intern.find()
-      .populate("branch", "name")
+      .populate("branches.branch", "name")
       .lean();
 
     const allLessons = await Lesson.find({
@@ -201,16 +200,12 @@ exports.getAttendanceStats = async (req, res) => {
       );
 
       // 🔹 Разделяем уроки на confirmed и pending
-      // Старые уроки без status: isRated=true → confirmed, иначе → pending
       const confirmedLessons = internLessons.filter(
-        (l) =>
-          l.status === "confirmed" || (l.status === undefined && l.isRated)
+        (l) => l.status === "confirmed"
       );
 
       const pendingLessons = internLessons.filter(
-        (l) =>
-          l.status === "pending" ||
-          (l.status === undefined && !l.isRated)
+        (l) => l.status === "pending"
       );
 
       // 🔹 Получаем конфиг грейда
@@ -233,8 +228,9 @@ exports.getAttendanceStats = async (req, res) => {
           internId: intern._id,
           name: `${intern.name} ${intern.lastName}`,
           grade: intern.grade,
-          branchId: intern.branch?._id,
-          branch: intern.branch,
+          branchId: intern.branches?.[0]?.branch?._id,
+          branch: intern.branches?.[0]?.branch || null,
+          branches: intern.branches,
           confirmedCount: confirmedLessons.length,
           pendingCount: pendingLessons.length,
           attended: confirmedLessons.length,
@@ -296,8 +292,9 @@ exports.getAttendanceStats = async (req, res) => {
         internId: intern._id,
         name: `${intern.name} ${intern.lastName}`,
         grade: gradeKey,
-        branchId: intern.branch?._id,
-        branch: intern.branch,
+        branchId: intern.branches?.[0]?.branch?._id,
+        branch: intern.branches?.[0]?.branch || null,
+        branches: intern.branches,
         confirmedCount: effectiveConfirmedCount,
         confirmedLessonsCount: confirmedLessons.length,
         bonusCount: bonusCount,

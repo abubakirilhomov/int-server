@@ -19,23 +19,30 @@ exports.getViolations = catchAsync(async (req, res) => {
         },
         { $unwind: { path: "$ruleDetails", preserveNullAndEmptyArrays: true } },
 
-        // 3. Подтягиваем данные о филиале
+        // 3. Добавляем поле primaryBranch = первый элемент branches.branch
+        {
+            $addFields: {
+                primaryBranchId: { $arrayElemAt: ["$branches.branch", 0] }
+            }
+        },
+
+        // 4. Подтягиваем данные о филиале
         {
             $lookup: {
                 from: "branches",
-                localField: "branch",
+                localField: "primaryBranchId",
                 foreignField: "_id",
                 as: "branchDetails"
             }
         },
         { $unwind: { path: "$branchDetails", preserveNullAndEmptyArrays: true } },
 
-        // 4. Формируем плоскую структуру
+        // 5. Формируем плоскую структуру
         {
             $project: {
                 internId: "$_id",
                 internName: { $concat: ["$name", " ", "$lastName"] },
-                branchId: "$branch",
+                branchId: "$primaryBranchId",
                 branchName: "$branchDetails.name",
                 ruleTitle: "$ruleDetails.title",
                 category: "$ruleDetails.category",
@@ -47,7 +54,7 @@ exports.getViolations = catchAsync(async (req, res) => {
         }
     ];
 
-    // 5. Фильтрация (Match)
+    // 6. Фильтрация (Match)
     const matchStage = {};
 
     if (branch && branch !== 'all') {
@@ -72,7 +79,7 @@ exports.getViolations = catchAsync(async (req, res) => {
         pipeline.push({ $match: matchStage });
     }
 
-    // 6. Сортировка по дате (сначала новые)
+    // 7. Сортировка по дате (сначала новые)
     pipeline.push({ $sort: { date: -1 } });
 
     const violations = await Intern.aggregate(pipeline);

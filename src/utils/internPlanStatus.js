@@ -100,7 +100,7 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
   const confirmedLessonsCount = await Lesson.countDocuments({
     intern: intern._id,
     date: { $gte: start, $lte: end },
-    $or: [{ status: "confirmed" }, { status: { $exists: false }, isRated: true }],
+    status: "confirmed",
   });
 
   const bonusLessonsCount = (intern.bonusLessons || [])

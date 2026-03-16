@@ -15,13 +15,14 @@ router.post('/', auth, isAdmin, validateRequest(createInternSchema), internCtrl.
 router.post('/login', internCtrl.loginIntern);
 router.post("/refresh-token", internCtrl.refreshToken);
 router.patch("/me/profile", auth, internCtrl.updateOwnProfile);
+router.patch("/me/password", auth, internCtrl.changePassword);
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
 router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки
 router.get('/:id', auth, internCtrl.getInternProfile);
-router.patch("/:id/upgrade", auth, internCtrl.upgradeInternGrade);
+router.patch("/:id/upgrade", auth, isAdmin, internCtrl.upgradeInternGrade);
 router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
 router.patch("/:id/head-intern", auth, isAdmin, internCtrl.setHeadIntern);
 router.patch("/:id/activation", auth, isAdmin, internCtrl.setInternActivation);

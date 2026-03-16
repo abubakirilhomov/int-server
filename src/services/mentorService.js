@@ -65,7 +65,8 @@ class MentorService {
                     _id: mentor._id,
                     name: mentor.name,
                     lastName: mentor.lastName,
-                    branch: mentor.branch,
+                    branches: mentor.branches,
+                    branch: mentor.branches?.[0] || null,
                     totalDebt: debtCount
                 };
             })

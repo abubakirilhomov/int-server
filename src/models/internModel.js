@@ -24,16 +24,14 @@ const internSchema = new mongoose.Schema({
     default: "backend-nodejs",
   },
   profilePhoto: { type: String, trim: true, default: "" },
-  branch: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Branch",
-    required: true,
-  },
-  mentor: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Mentor",
-    required: true,
-  },
+  branches: [
+    {
+      branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: true },
+      mentor: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", required: true },
+      isHeadIntern: { type: Boolean, default: false },
+      joinedAt: { type: Date, default: Date.now },
+    },
+  ],
   score: { type: Number, default: 0 },
   mentorsEvaluated: { type: Map, of: Boolean, default: {} },
   feedbacks: [
@@ -118,7 +116,6 @@ const internSchema = new mongoose.Schema({
     enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
     note: { type: String, trim: true, default: "" },
   },
-  isHeadIntern: { type: Boolean, default: false },
   bonusLessons: [
     {
       count: { type: Number, required: true },
@@ -152,10 +149,40 @@ const internSchema = new mongoose.Schema({
   ],
 });
 
-// Index
+// Virtuals for backward compatibility
+internSchema.virtual("branch").get(function () {
+  return this.branches?.[0]?.branch || null;
+});
+internSchema.virtual("mentor").get(function () {
+  return this.branches?.[0]?.mentor || null;
+});
+internSchema.virtual("isHeadIntern").get(function () {
+  return this.branches?.some((b) => b.isHeadIntern) || false;
+});
+
+// Instance methods
+internSchema.methods.getMentorForBranch = function (branchId) {
+  return (
+    this.branches.find((b) => b.branch.toString() === branchId.toString())
+      ?.mentor || null
+  );
+};
+internSchema.methods.isInBranch = function (branchId) {
+  return this.branches.some(
+    (b) => b.branch.toString() === branchId.toString()
+  );
+};
+internSchema.methods.isHeadInternAt = function (branchId) {
+  return (
+    this.branches.find((b) => b.branch.toString() === branchId.toString())
+      ?.isHeadIntern || false
+  );
+};
+
+// Indexes
 internSchema.index({ username: 1 });
-internSchema.index({ branch: 1 });
-internSchema.index({ mentor: 1 });
+internSchema.index({ "branches.branch": 1 });
+internSchema.index({ "branches.mentor": 1 });
 
 // Password hash
 internSchema.pre("save", async function (next) {

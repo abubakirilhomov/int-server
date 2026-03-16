@@ -284,11 +284,10 @@ exports.getBranchManagerInterns = catchAsync(async (req, res) => {
 });
 
 exports.addBranchManagerComplaint = catchAsync(async (req, res) => {
-  const { text } = req.body;
   const result = await internService.addBranchManagerComplaint(
     req.user,
     req.params.id,
-    text
+    req.body
   );
   res.json(result);
 });

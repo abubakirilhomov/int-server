@@ -91,6 +91,12 @@ const internSchema = new mongoose.Schema({
   complaints: [
     {
       text: { type: String, required: true, trim: true },
+      category: {
+        type: String,
+        enum: ["green", "yellow", "red", "black", "other"],
+        default: "other",
+      },
+      ruleIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Rule" }],
       createdAt: { type: Date, default: Date.now },
       createdById: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
       createdByName: { type: String, trim: true, default: "" },

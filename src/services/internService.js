@@ -2,6 +2,7 @@ const Intern = require("../models/internModel");
 const Branch = require("../models/branchModel");
 const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
+const Rule = require("../models/rulesModel");
 const grades = require("../config/grades");
 const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
@@ -396,12 +397,16 @@ class InternService {
         );
     }
 
-    async addBranchManagerComplaint(user, targetInternId, text) {
+    async addBranchManagerComplaint(user, targetInternId, payload = {}) {
+        const text = String(payload.text || "").trim();
+        const rawRuleIds = Array.isArray(payload.ruleIds) ? payload.ruleIds : [];
+        const category = payload.category || "other";
+
         if (!["branchManager", "admin"].includes(user?.role)) {
             throw new AppError("Только branch manager или admin может отправлять жалобы", 403);
         }
-        if (!text || !text.trim()) {
-            throw new AppError("Текст жалобы обязателен", 400);
+        if (!text && rawRuleIds.length === 0) {
+            throw new AppError("Добавьте текст жалобы или выберите правило", 400);
         }
 
         const intern = await Intern.findById(targetInternId).populate("branch", "name");
@@ -411,8 +416,36 @@ class InternService {
             throw new AppError("Можно отправлять жалобы только на стажёров своего филиала", 403);
         }
 
+        const uniqueRuleIds = [...new Set(rawRuleIds.map(String))];
+        const rules = uniqueRuleIds.length
+            ? await Rule.find({ _id: { $in: uniqueRuleIds } }).select("category title")
+            : [];
+
+        if (uniqueRuleIds.length && rules.length !== uniqueRuleIds.length) {
+            throw new AppError("Некоторые правила не найдены", 400);
+        }
+
+        const severity = { green: 1, yellow: 2, red: 3, black: 4 };
+        const complaintCategory = rules.length
+            ? rules
+                .map((rule) => rule.category)
+                .sort((a, b) => (severity[b] || 0) - (severity[a] || 0))[0]
+            : category || "other";
+
+        rules.forEach((rule) => {
+            intern.violations.push({
+                ruleId: rule._id,
+                date: new Date(),
+                notes: text || `Жалоба от branch manager: ${rule.title}`,
+                issuedBy: user.role === "admin" ? "admin" : "branchManager",
+                issuedById: user.id || user._id,
+            });
+        });
+
         intern.complaints.push({
-            text: text.trim(),
+            text: text || `Жалоба по правилам: ${rules.map((r) => r.title).join(", ")}`,
+            category: complaintCategory,
+            ruleIds: rules.map((rule) => rule._id),
             createdAt: new Date(),
             createdById: user.id || user._id,
             createdByName: user.name ? `${user.name} ${user.lastName || ""}`.trim() : "",

@@ -37,7 +37,18 @@ exports.getViolations = catchAsync(async (req, res) => {
         },
         { $unwind: { path: "$branchDetails", preserveNullAndEmptyArrays: true } },
 
-        // 5. Формируем плоскую структуру
+        // 5. Подтягиваем данные о менторе, который выдал нарушение
+        {
+            $lookup: {
+                from: "mentors",
+                localField: "violations.issuedById",
+                foreignField: "_id",
+                as: "issuerDetails"
+            }
+        },
+        { $unwind: { path: "$issuerDetails", preserveNullAndEmptyArrays: true } },
+
+        // 6. Формируем плоскую структуру
         {
             $project: {
                 internId: "$_id",
@@ -49,7 +60,15 @@ exports.getViolations = catchAsync(async (req, res) => {
                 date: "$violations.date",
                 notes: "$violations.notes",
                 consequenceApplied: "$violations.consequenceApplied",
-                grade: "$grade"
+                grade: "$grade",
+                issuedBy: "$violations.issuedBy",
+                issuedByName: {
+                    $cond: [
+                        { $ifNull: ["$issuerDetails", false] },
+                        { $concat: ["$issuerDetails.name", " ", { $ifNull: ["$issuerDetails.lastName", ""] }] },
+                        null
+                    ]
+                }
             }
         }
     ];

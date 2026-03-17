@@ -98,7 +98,7 @@ exports.getPendingLessons = async (req, res) => {
   try {
     const mentorId = req.user.id || req.user._id; // Fix: use id instead of mentorId
 
-    const lessons = await Lesson.find({ mentor: mentorId, isRated: false })
+    const lessons = await Lesson.find({ mentor: mentorId, status: "pending" })
       .populate(
         "intern",
         "name lastName username branch grade score lessonsVisited feedbacks"

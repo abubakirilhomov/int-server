@@ -513,7 +513,7 @@ class InternService {
 
         const lesson = await Lesson.findById(lessonId).populate("intern");
         if (!lesson) throw new AppError("Урок не найден", 404);
-        if (lesson.isRated) throw new AppError("Урок уже оценен", 400);
+        if (lesson.status === "confirmed") throw new AppError("Урок уже оценен", 400);
 
         // Check if mentor field exists and owns the lesson
         if (!lesson.mentor) {

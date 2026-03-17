@@ -20,7 +20,6 @@ class MentorService {
             mentor: mentorId,
             date: { $gte: startOfMonth, $lte: endOfMonth },
             status: "confirmed",
-            isRated: true,
         });
 
         // 3. Задолженность (все уроки, которые не оценены, не зависимо от месяца, так как долг висит)

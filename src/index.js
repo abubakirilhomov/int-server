@@ -23,7 +23,6 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const mongoSanitize = require("express-mongo-sanitize");
 const cronService = require("./services/cronService");
 
 // Init Cron Jobs
@@ -68,10 +67,6 @@ app.use(cors({ origin: allowedOrigins }));
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
 
-// ─── NoSQL injection sanitization ────────────────────────────────────────────
-// xss-clean removed: unmaintained, crashes on new Node (req.query is read-only)
-// XSS not relevant for a pure JSON API with no HTML rendering
-app.use(mongoSanitize());
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────
 // General: 100 req/min per IP

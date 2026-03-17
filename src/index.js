@@ -78,10 +78,10 @@ const generalLimiter = rateLimit({
   message: { error: "Слишком много запросов. Попробуйте через минуту." },
 });
 
-// Auth: 5 attempts per 15 min per IP
+// Auth: 20 attempts per 15 min per IP
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Слишком много попыток входа. Попробуйте через 15 минут." },

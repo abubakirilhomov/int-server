@@ -43,9 +43,18 @@ exports.getMentorInternLocations = async (req, res) => {
   try {
     const mentorId = req.user.id;
 
-    // Find all interns where this mentor is assigned
+    // Get mentor's branches
+    const Mentor = require("../models/mentorModel");
+    const mentor = await Mentor.findById(mentorId, { branches: 1 }).lean();
+    const branchIds = mentor?.branches || [];
+
+    if (!branchIds.length) {
+      return res.json({ data: [] });
+    }
+
+    // Find all interns in those branches (regardless of which mentor they belong to)
     const interns = await Intern.find(
-      { "branches.mentor": mentorId },
+      { "branches.branch": { $in: branchIds } },
       { _id: 1, name: 1, lastName: 1, grade: 1, profilePhoto: 1 }
     ).lean();
 

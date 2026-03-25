@@ -103,6 +103,12 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     status: "confirmed",
   });
 
+  const pendingLessonsCount = await Lesson.countDocuments({
+    intern: intern._id,
+    date: { $gte: start, $lte: end },
+    status: "pending",
+  });
+
   const bonusLessonsCount = (intern.bonusLessons || [])
     .filter((bonus) => {
       const bonusDate = bonus?.date ? new Date(bonus.date) : null;
@@ -110,7 +116,7 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     })
     .reduce((sum, bonus) => sum + (bonus.count || 0), 0);
 
-  const confirmedLessonsThisMonth = confirmedLessonsCount + bonusLessonsCount;
+  const confirmedLessonsThisMonth = confirmedLessonsCount + pendingLessonsCount + bonusLessonsCount;
   const deficit = Math.max(0, requiredLessonsByNow - confirmedLessonsThisMonth);
   // Блокировка только если прошло больше 3 рабочих дней с начала периода
   const isPlanBlocked = elapsedWorkingDays > 3 && requiredLessonsByNow > 0 && deficit > 0;
@@ -124,6 +130,8 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     completedWeeksInMonth,
     requiredLessonsByNow,
     confirmedLessonsThisMonth,
+    confirmedLessonsCount,
+    pendingLessonsCount,
     deficit,
     isManuallyActivated: false,
     elapsedWorkingDays,

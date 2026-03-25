@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const grades = require("../config/grades");
+const GradeConfig = require("./gradeConfigModel");
 const Mentor = require("./mentorModel");
 const Lesson = require("./lessonModel");
 
@@ -192,7 +193,7 @@ internSchema.pre("save", async function (next) {
 
   // 2. Sync grade → probationPeriod / lessonsPerMonth / pluses
   if (this.isNew || this.isModified("grade")) {
-    const gradeConfig = grades[this.grade];
+    const gradeConfig = (await GradeConfig.findOne({ grade: this.grade }).lean()) || grades[this.grade];
     if (gradeConfig) {
       const newPeriod = gradeConfig.trialPeriod;
       if (this.isModified("grade") && this.probationPeriod !== newPeriod) {
@@ -200,7 +201,7 @@ internSchema.pre("save", async function (next) {
       }
       this.probationPeriod = newPeriod;
       this.lessonsPerMonth = gradeConfig.lessonsPerMonth;
-      this.pluses = gradeConfig.plus;
+      this.pluses = gradeConfig.perks || gradeConfig.plus || [];
     }
   }
 

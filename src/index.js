@@ -102,6 +102,8 @@ app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/uploads", require("./routes/uploadRoutes"));
+app.use("/api/locations", require("./routes/locationRoutes"));
+app.use("/api/grade-config", require("./routes/gradeConfigRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

@@ -122,10 +122,15 @@ class InternService {
 
         const internRatings = interns.map((intern) => {
             const feedbacks = intern.feedbacks || [];
-            const lessons = intern.lessonsVisited || [];
+            const lessonsVisited = intern.lessonsVisited || [];
+            const bonusLessons = intern.bonusLessons || [];
+
+            // Correct lesson count: sum all visit counts + bonus lessons
+            const visitedCount = lessonsVisited.reduce((sum, l) => sum + (l.count || 0), 0);
+            const bonusCount = bonusLessons.reduce((sum, b) => sum + (b.count || 0), 0);
+            const lessonCount = Math.max(visitedCount + bonusCount, 1);
 
             const feedbackCount = feedbacks.length;
-            const lessonCount = lessons.length || 1;
 
             const averageStars =
                 feedbacks.reduce((sum, f) => sum + (f.stars || 0), 0) /
@@ -148,11 +153,12 @@ class InternService {
             return {
                 internId: intern._id,
                 name: `${intern.name} ${intern.lastName}`,
+                profilePhoto: intern.profilePhoto || "",
                 branch: intern.branches?.map((b) => b.branch?.name).filter(Boolean).join(", ") || "No branch",
                 grade: intern.grade,
                 averageStars: +averageStars.toFixed(2),
                 activityRate: +activityRate.toFixed(2),
-                planCompletion: +(planCompletion * 100).toFixed(1), // в %
+                planCompletion: +(planCompletion * 100).toFixed(1),
                 lessons: lessonCount,
                 feedbacks: feedbackCount,
                 ratingScore: +ratingScore.toFixed(2),

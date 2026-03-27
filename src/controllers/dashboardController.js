@@ -243,11 +243,13 @@ exports.getDashboardStats = async (req, res) => {
             nearDeadline: daysRemaining <= 7 && daysRemaining > 0,
             canGetConcession: percentage >= 50 && percentage <= 60 && daysRemaining <= 7,
 
-            // 🆕 New Data
+            // trialStats — прогресс испытательного срока.
+            // Используем lessonsConfirmed (уроки текущего месяца), а не уроки с даты повышения,
+            // потому что цель `lessonsPerMonth` измеряется помесячно.
             trialStats: {
-                totalLessons: trialLessonsConfirmed,
-                targetLessons: trialTotalGoal,
-                progressPercentage: trialTotalGoal > 0 ? Math.round((trialLessonsConfirmed / trialTotalGoal) * 100) : 0
+                totalLessons: lessonsConfirmed,
+                targetLessons: monthlyGoal,
+                progressPercentage: monthlyGoal > 0 ? Math.round((lessonsConfirmed / monthlyGoal) * 100) : 0
             },
             history: monthlyHistory,
             recentLessons: recentLessonsData,

@@ -502,6 +502,7 @@ class InternService {
     }
 
     async deleteIntern(id) {
+        await Lesson.deleteMany({ intern: id });
         await Intern.findByIdAndDelete(id);
     }
 

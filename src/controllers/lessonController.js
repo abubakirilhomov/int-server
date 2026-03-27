@@ -25,6 +25,26 @@ exports.createLesson = async (req, res) => {
       }
     }
 
+    // Prevent duplicate lessons: same intern + mentor + date
+    if (payload.intern && payload.mentor && payload.date) {
+      const dayStart = new Date(payload.date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(payload.date);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const existing = await Lesson.findOne({
+        intern: payload.intern,
+        mentor: payload.mentor,
+        date: { $gte: dayStart, $lte: dayEnd },
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          message: "Урок с этим ментором на эту дату уже существует.",
+        });
+      }
+    }
+
     const lesson = await Lesson.create(payload);
 
     // После создания урока — обновляем посещения интерна

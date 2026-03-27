@@ -1,6 +1,7 @@
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
 const grades = require("../config/grades.js");
+const GradeConfig = require("../models/gradeConfigModel");
 const { sendNotificationToUser } = require("./notificationController.js");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 // Создать урок
@@ -173,14 +174,42 @@ exports.getAttendanceStats = async (req, res) => {
       lastDay = new Date(endDate);
     }
 
-    // 🔹 Получаем всех интернов и их уроки
-    const interns = await Intern.find()
-      .populate("branches.branch", "name")
-      .lean();
+    // 🔹 Параллельно грузим интернов, уроки (агрегация) и конфиги грейдов
+    const [interns, lessonAgg, gradeConfigsFromDB] = await Promise.all([
+      Intern.find()
+        .select("name lastName grade branches probationStartDate createdAt isHeadIntern bonusLessons")
+        .populate("branches.branch", "name")
+        .lean(),
 
-    const allLessons = await Lesson.find({
-      date: { $gte: firstDay, $lte: lastDay },
-    }).lean();
+      // Считаем уроки прямо в MongoDB — не грузим все документы в JS
+      Lesson.aggregate([
+        { $match: { date: { $gte: firstDay, $lte: lastDay } } },
+        {
+          $group: {
+            _id: { intern: "$intern", status: "$status" },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+
+      // Конфиги грейдов из БД (с фолбэком на grades.js ниже)
+      GradeConfig.find().lean(),
+    ]);
+
+    // Строим карту: grade → config (DB первичен, grades.js как фолбэк)
+    const gradeConfigMap = { ...grades };
+    gradeConfigsFromDB.forEach((cfg) => {
+      gradeConfigMap[cfg.grade] = cfg;
+    });
+
+    // Карта: internId → { confirmed, pending }
+    const lessonMap = {};
+    lessonAgg.forEach(({ _id, count }) => {
+      const id = _id.intern.toString();
+      if (!lessonMap[id]) lessonMap[id] = { confirmed: 0, pending: 0 };
+      if (_id.status === "confirmed") lessonMap[id].confirmed = count;
+      if (_id.status === "pending") lessonMap[id].pending = count;
+    });
 
     // 🔹 Функция для подсчета дней между датами
     const daysBetween = (start, end) => {
@@ -190,23 +219,12 @@ exports.getAttendanceStats = async (req, res) => {
 
     // 🔹 Обрабатываем каждого интерна
     const stats = interns.map((intern) => {
-      // Определяем дату начала работы
+      const internId = intern._id.toString();
       const startWorkDate = intern.probationStartDate || intern.createdAt;
       const daysWorking = daysBetween(startWorkDate, now);
 
-      // Фильтруем уроки этого интерна за период
-      const internLessons = allLessons.filter(
-        (l) => l.intern.toString() === intern._id.toString()
-      );
-
-      // 🔹 Разделяем уроки на confirmed и pending
-      const confirmedLessons = internLessons.filter(
-        (l) => l.status === "confirmed"
-      );
-
-      const pendingLessons = internLessons.filter(
-        (l) => l.status === "pending"
-      );
+      const confirmedLessonsCount = lessonMap[internId]?.confirmed || 0;
+      const pendingLessonsCount = lessonMap[internId]?.pending || 0;
 
       // 🔹 Получаем конфиг грейда
       const gradeMap = {
@@ -220,8 +238,8 @@ exports.getAttendanceStats = async (req, res) => {
       };
 
       const gradeKey =
-        gradeMap[intern.grade?.toLowerCase()?.replace(/\s/g, "")] || "junior";
-      const gradeConfig = grades[gradeKey];
+        gradeMap[intern.grade?.toLowerCase()?.replace(/\s/g, "")] || intern.grade || "junior";
+      const gradeConfig = gradeConfigMap[gradeKey];
 
       if (!gradeConfig) {
         return {
@@ -231,9 +249,9 @@ exports.getAttendanceStats = async (req, res) => {
           branchId: intern.branches?.[0]?.branch?._id,
           branch: intern.branches?.[0]?.branch || null,
           branches: intern.branches,
-          confirmedCount: confirmedLessons.length,
-          pendingCount: pendingLessons.length,
-          attended: confirmedLessons.length,
+          confirmedCount: confirmedLessonsCount,
+          pendingCount: pendingLessonsCount,
+          attended: confirmedLessonsCount,
           daysWorking: daysWorking,
           norm: null,
           percentage: null,
@@ -246,14 +264,11 @@ exports.getAttendanceStats = async (req, res) => {
       let norm;
 
       if (period === "month" && !prevMonth) {
-        // Текущий месяц: норма = (дни_работы_в_месяце / 30) * lessonsPerMonth
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const effectiveStart =
-          startWorkDate > monthStart ? startWorkDate : monthStart;
+        const effectiveStart = startWorkDate > monthStart ? startWorkDate : monthStart;
         const daysInMonth = daysBetween(effectiveStart, now);
         norm = Math.ceil((daysInMonth / 30) * gradeConfig.lessonsPerMonth);
       } else if (period === "month" && prevMonth === "true") {
-        // Прошлый месяц: полная норма если работал весь месяц
         const prevMonthStart = firstDay;
         const prevMonthEnd = lastDay;
         if (startWorkDate <= prevMonthStart) {
@@ -262,7 +277,7 @@ exports.getAttendanceStats = async (req, res) => {
           const daysInPrevMonth = daysBetween(startWorkDate, prevMonthEnd);
           norm = Math.ceil((daysInPrevMonth / 30) * gradeConfig.lessonsPerMonth);
         } else {
-          norm = 0; // Еще не работал в прошлом месяце
+          norm = 0;
         }
       } else if (period === "week") {
         norm = Math.round(gradeConfig.lessonsPerMonth / 4);
@@ -276,15 +291,18 @@ exports.getAttendanceStats = async (req, res) => {
       // 🔹 Расчет испытательного периода и дедлайнов
       const trialPeriodDays = gradeConfig.trialPeriod * 30;
       const daysRemaining = trialPeriodDays - daysWorking;
-      // ⚠️ Исправление: "близко к дедлайну" включает и тех, у кого срок истёк (отрицательное число)
       const nearDeadline = daysRemaining <= 7;
       const isOverdue = daysRemaining < 0;
-      // 🎁 Бонусные уроки за период
+
+      // 🎁 Бонусные уроки за период — явное преобразование в Date
       const bonusCount = (intern.bonusLessons || [])
-        .filter((b) => b.date >= firstDay && b.date <= lastDay)
+        .filter((b) => {
+          const d = b.date ? new Date(b.date) : null;
+          return d && !isNaN(d) && d >= firstDay && d <= lastDay;
+        })
         .reduce((sum, b) => sum + (b.count || 0), 0);
 
-      const effectiveConfirmedCount = confirmedLessons.length + bonusCount;
+      const effectiveConfirmedCount = confirmedLessonsCount + bonusCount;
       const percentage = norm > 0 ? Math.round((effectiveConfirmedCount / norm) * 100) : 0;
       const canPromoteWithConcession = percentage >= 50 && percentage <= 60 && nearDeadline;
 
@@ -296,9 +314,9 @@ exports.getAttendanceStats = async (req, res) => {
         branch: intern.branches?.[0]?.branch || null,
         branches: intern.branches,
         confirmedCount: effectiveConfirmedCount,
-        confirmedLessonsCount: confirmedLessons.length,
+        confirmedLessonsCount: confirmedLessonsCount,
         bonusCount: bonusCount,
-        pendingCount: pendingLessons.length,
+        pendingCount: pendingLessonsCount,
         attended: effectiveConfirmedCount,
         daysWorking: daysWorking,
         norm: norm,
@@ -317,7 +335,7 @@ exports.getAttendanceStats = async (req, res) => {
     // Сортируем по проценту выполнения (по убыванию)
     stats.sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
 
-    res.json({ stats, grades });
+    res.json({ stats, grades: gradeConfigMap });
   } catch (err) {
     console.error("Ошибка в getAttendanceStats:", err);
     res.status(500).json({ message: err.message });

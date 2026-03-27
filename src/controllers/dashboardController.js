@@ -1,6 +1,7 @@
 const Lesson = require("../models/lessonModel");
 const User = require("../models/internModel");
 const grades = require("../config/grades");
+const GradeConfig = require("../models/gradeConfigModel");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 
 const MAX_SCORE = 5;
@@ -21,7 +22,7 @@ exports.getDashboardStats = async (req, res) => {
         }
 
         const gradeKey = user.grade;
-        const gradeConfig = grades[gradeKey];
+        const gradeConfig = (await GradeConfig.findOne({ grade: gradeKey }).lean()) || grades[gradeKey];
 
         if (!gradeConfig) {
             return res.status(400).json({ message: "Некорректный грейд пользователя" });
@@ -40,16 +41,16 @@ exports.getDashboardStats = async (req, res) => {
             monthlyHistoryData,
             recentLessonsData
         ] = await Promise.all([
-            // A. Current Month (for existing logic)
+            // A. Current Month — filter by lesson date (not createdAt)
             Lesson.find({
                 intern: userId,
-                createdAt: { $gte: startOfMonth, $lt: endOfMonth },
+                date: { $gte: startOfMonth, $lt: endOfMonth },
             }).lean(),
 
-            // B. Entire Trial Period (New Request)
+            // B. Entire Trial Period — filter by lesson date from probationStartDate
             Lesson.find({
                 intern: userId,
-                createdAt: { $gte: startDate },
+                date: { $gte: startDate },
             }).lean(),
 
             // C. Monthly History (Aggregation)

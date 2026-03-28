@@ -26,6 +26,21 @@ exports.createLesson = async (req, res) => {
       }
     }
 
+    // Check if intern has a lesson without internFeedback
+    if (req.user?.role === "intern") {
+      const pendingFeedback = await Lesson.findOne({
+        intern: req.user.id,
+        "internFeedback.submittedAt": { $exists: false },
+      }).sort({ createdAt: -1 }).lean();
+
+      if (pendingFeedback) {
+        return res.status(409).json({
+          message: "Аввалги дарсни баҳолаб юборинг",
+          pendingFeedbackLessonId: pendingFeedback._id,
+        });
+      }
+    }
+
     // Prevent duplicate lessons: same intern + mentor + date
     if (payload.intern && payload.mentor && payload.date) {
       const dayStart = new Date(payload.date);

@@ -62,7 +62,17 @@ const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
 
-app.use(cors({ origin: allowedOrigins }));
+// On stage: also allow any Vercel preview URL (*.vercel.app)
+const corsOriginFn = (origin, callback) => {
+  if (!origin) return callback(null, true); // non-browser requests
+  if (allowedOrigins.includes(origin)) return callback(null, true);
+  if (process.env.NODE_ENV !== "production" && origin.endsWith(".vercel.app")) {
+    return callback(null, true);
+  }
+  callback(new Error("Not allowed by CORS"));
+};
+
+app.use(cors({ origin: corsOriginFn }));
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));

@@ -15,6 +15,7 @@ class MentorService {
         });
 
         // 2. Количество оставленных фидбэков за месяц
+        // Фидбэк считается оставленным, если урок имеет статус "confirmed" и isRated: true
         const monthFeedbacks = await Lesson.countDocuments({
             mentor: mentorId,
             date: { $gte: startOfMonth, $lte: endOfMonth },
@@ -24,7 +25,7 @@ class MentorService {
         // 3. Задолженность (все уроки, которые не оценены, не зависимо от месяца, так как долг висит)
         const pendingLessons = await Lesson.find({
             mentor: mentorId,
-            status: "pending",
+            status: "pending", // или isRated: false
         })
             .populate("intern", "name lastName");
 
@@ -36,24 +37,11 @@ class MentorService {
             topic: l.topic
         }));
 
-        // 4. qualityScore — среднее internFeedback.score за последние 30 дней
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-        const feedbackLessons = await Lesson.find({
-            mentor: mentorId,
-            "internFeedback.submittedAt": { $gte: thirtyDaysAgo },
-        }).select("internFeedback.score").lean();
-
-        const qualityScore = feedbackLessons.length > 0
-            ? +(feedbackLessons.reduce((s, l) => s + (l.internFeedback?.score || 0), 0) / feedbackLessons.length).toFixed(2)
-            : null;
-
         return {
             monthLessons,
             monthFeedbacks,
             totalDebt: pendingLessons.length,
-            debtDetails,
-            qualityScore,
-            qualityFeedbackCount: feedbackLessons.length,
+            debtDetails
         };
     }
 

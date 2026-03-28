@@ -27,11 +27,6 @@ const lessonSchema = new mongoose.Schema(
       default: "pending",
     },
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
-    internFeedback: {
-      criteria: [{ type: mongoose.Schema.Types.ObjectId, ref: "LessonCriteria" }],
-      score: { type: Number },
-      submittedAt: { type: Date },
-    },
   },
   { timestamps: true }
 );

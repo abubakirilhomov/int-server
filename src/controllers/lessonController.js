@@ -1,6 +1,5 @@
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
-const LessonCriteria = require("../models/lessonCriteriaModel");
 const grades = require("../config/grades.js");
 const GradeConfig = require("../models/gradeConfigModel");
 const { sendNotificationToUser } = require("./notificationController.js");
@@ -162,61 +161,6 @@ exports.deleteLesson = async (req, res) => {
     const lesson = await Lesson.findByIdAndDelete(req.params.id);
     if (!lesson) return res.status(404).json({ message: "Lesson not found" });
     res.json({ message: "Lesson deleted" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// PATCH /api/lessons/:id/intern-feedback
-exports.submitInternFeedback = async (req, res) => {
-  try {
-    const { criteria: criteriaIds } = req.body;
-
-    if (!Array.isArray(criteriaIds)) {
-      return res.status(400).json({ message: "criteria должен быть массивом" });
-    }
-
-    const lesson = await Lesson.findById(req.params.id);
-    if (!lesson) {
-      return res.status(404).json({ message: "Урок не найден" });
-    }
-
-    if (lesson.intern.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Нет доступа к этому уроку" });
-    }
-
-    if (lesson.internFeedback?.submittedAt) {
-      return res.status(409).json({ message: "Фидбек уже отправлен" });
-    }
-
-    // Load active criteria matching the provided IDs
-    const criteriaList = await LessonCriteria.find({
-      _id: { $in: criteriaIds },
-      isActive: true,
-    }).lean();
-
-    // Calculate score
-    let score = 5;
-    let positiveCount = 0;
-    for (const c of criteriaList) {
-      if (c.type === "negative") {
-        score -= c.weight;
-      } else if (c.type === "positive") {
-        positiveCount += 1;
-      }
-    }
-    score += 0.5 * positiveCount;
-    score = Math.max(0, Math.min(5, score));
-
-    lesson.internFeedback = {
-      criteria: criteriaList.map((c) => c._id),
-      score,
-      submittedAt: new Date(),
-    };
-
-    await lesson.save();
-
-    res.json(lesson);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

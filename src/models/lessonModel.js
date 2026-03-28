@@ -30,6 +30,7 @@ const lessonSchema = new mongoose.Schema(
     internFeedback: {
       criteria: [{ type: mongoose.Schema.Types.ObjectId, ref: "LessonCriteria" }],
       score: { type: Number },
+      comment: { type: String, default: "" },
       submittedAt: { type: Date },
     },
   },

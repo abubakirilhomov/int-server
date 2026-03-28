@@ -170,7 +170,7 @@ exports.deleteLesson = async (req, res) => {
 // PATCH /api/lessons/:id/intern-feedback
 exports.submitInternFeedback = async (req, res) => {
   try {
-    const { criteria: criteriaIds } = req.body;
+    const { criteria: criteriaIds, comment = "" } = req.body;
 
     if (!Array.isArray(criteriaIds)) {
       return res.status(400).json({ message: "criteria должен быть массивом" });
@@ -211,6 +211,7 @@ exports.submitInternFeedback = async (req, res) => {
     lesson.internFeedback = {
       criteria: criteriaList.map((c) => c._id),
       score,
+      comment: comment.trim().slice(0, 500),
       submittedAt: new Date(),
     };
 

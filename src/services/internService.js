@@ -136,7 +136,9 @@ class InternService {
                 feedbacks.reduce((sum, f) => sum + (f.stars || 0), 0) /
                 (feedbackCount || 1);
 
-            const activityRate = Math.min(feedbackCount / lessonCount, 1);
+            // activityRate uses only real lessons (visitedCount) as denominator
+            // because bonus lessons don't generate mentor feedbacks by design
+            const activityRate = Math.min(feedbackCount / Math.max(visitedCount, 1), 1);
             const attendanceFactor = Math.log(lessonCount + 1) / Math.log(30 + 1);
 
             const planCompletion = Math.min(

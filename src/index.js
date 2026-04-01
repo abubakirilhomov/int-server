@@ -29,6 +29,7 @@ const cronService = require("./services/cronService");
 cronService.init();
 
 const app = express();
+app.set("trust proxy", 1);
 const connectDB = require("./config/database");
 const internRoutes = require("./routes/internRoutes");
 const branchRoutes = require("./routes/branchRoutes");

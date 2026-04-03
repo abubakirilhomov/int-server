@@ -111,12 +111,12 @@ exports.resetPassword = catchAsync(async (req, res) => {
 
 exports.loginMentor = catchAsync(async (req, res) => {
   const { name, lastName, password } = req.body;
-  if (!name || !password) throw new AppError("Name and password required", 400);
+  if (!name || !lastName || !password) throw new AppError("Name, lastName and password required", 400);
 
-  const query = { name: String(name).trim() };
-  if (lastName && String(lastName).trim()) {
-    query.lastName = String(lastName).trim();
-  }
+  const query = {
+    name: String(name).trim(),
+    lastName: String(lastName).trim(),
+  };
 
   // 1. Находим всех менторов с таким именем (explicitly select password)
   const mentors = await Mentor.find(query).select('+password');

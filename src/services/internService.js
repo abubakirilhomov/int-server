@@ -352,9 +352,8 @@ class InternService {
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
-        if (payload.password) {
-            payload.password = await bcrypt.hash(payload.password, 10);
-        }
+        // Password hashing is handled by the pre-save hook in internModel.js
+        // Do NOT hash here — it would cause double-hashing
 
         Object.assign(intern, payload);
         await intern.save();

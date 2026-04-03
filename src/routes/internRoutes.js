@@ -26,6 +26,7 @@ router.patch("/:id/upgrade", auth, isAdmin, internCtrl.upgradeInternGrade);
 router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
 router.patch("/:id/head-intern", auth, isAdmin, internCtrl.setHeadIntern);
 router.patch("/:id/activation", auth, isAdmin, internCtrl.setInternActivation);
+router.post("/:id/reset-password", auth, isAdmin, internCtrl.resetPassword);
 router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
 router.post("/:id/complaints", auth, internCtrl.addBranchManagerComplaint);
 

@@ -208,6 +208,21 @@ exports.updateOwnProfile = catchAsync(async (req, res) => {
   res.json(intern);
 });
 
+exports.resetPassword = catchAsync(async (req, res) => {
+  const intern = await Intern.findById(req.params.id);
+  if (!intern) throw new AppError("Intern not found", 404);
+
+  const tempPassword = Math.random().toString(36).slice(-8);
+  intern.password = tempPassword; // pre-save hook will hash it
+  await intern.save();
+
+  res.json({
+    success: true,
+    tempPassword,
+    intern: { _id: intern._id, name: intern.name, lastName: intern.lastName, username: intern.username },
+  });
+});
+
 exports.deleteIntern = catchAsync(async (req, res) => {
   await internService.deleteIntern(req.params.id);
   res.status(204).json({ message: "Intern deleted successfully" });

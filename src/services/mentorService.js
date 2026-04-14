@@ -37,11 +37,24 @@ class MentorService {
             topic: l.topic
         }));
 
+        // 4. qualityScore — среднее internFeedback.score за последние 30 дней
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const feedbackLessons = await Lesson.find({
+            mentor: mentorId,
+            "internFeedback.submittedAt": { $gte: thirtyDaysAgo },
+        }).select("internFeedback.score").lean();
+
+        const qualityScore = feedbackLessons.length > 0
+            ? +(feedbackLessons.reduce((s, l) => s + (l.internFeedback?.score || 0), 0) / feedbackLessons.length).toFixed(2)
+            : null;
+
         return {
             monthLessons,
             monthFeedbacks,
             totalDebt: pendingLessons.length,
-            debtDetails
+            debtDetails,
+            qualityScore,
+            qualityFeedbackCount: feedbackLessons.length,
         };
     }
 

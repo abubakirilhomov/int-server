@@ -106,6 +106,7 @@ app.use("/api/uploads", require("./routes/uploadRoutes"));
 app.use("/api/locations", require("./routes/locationRoutes"));
 app.use("/api/grade-config", require("./routes/gradeConfigRoutes"));
 app.use("/api/settings", require("./routes/settingsRoutes"));
+app.use("/api/lesson-criteria", require("./routes/lessonCriteriaRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

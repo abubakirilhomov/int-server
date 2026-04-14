@@ -191,6 +191,13 @@ exports.submitInternFeedback = async (req, res) => {
       return res.status(400).json({ message: "criteria должен быть массивом" });
     }
 
+    const trimmedComment = String(comment).trim();
+    if (criteriaIds.length === 0 && trimmedComment.length === 0) {
+      return res.status(400).json({
+        message: "Нужно выбрать хотя бы один критерий или написать комментарий",
+      });
+    }
+
     const lesson = await Lesson.findById(req.params.id);
     if (!lesson) {
       return res.status(404).json({ message: "Урок не найден" });
@@ -221,7 +228,7 @@ exports.submitInternFeedback = async (req, res) => {
     lesson.internFeedback = {
       criteria: criteriaList.map((c) => c._id),
       score,
-      comment: String(comment).trim().slice(0, 500),
+      comment: trimmedComment.slice(0, 500),
       submittedAt: new Date(),
     };
 

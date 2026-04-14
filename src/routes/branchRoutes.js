@@ -4,6 +4,7 @@ const controller = require('../controllers/branchController');
 
 router.post('/', controller.createBranch);
 router.get('/', controller.getBranches);
+router.put('/:id', controller.updateBranch);
 router.delete('/:id', controller.deleteBranch);
 
 module.exports = router;

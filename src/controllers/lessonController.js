@@ -204,6 +204,51 @@ exports.getPendingFeedback = async (req, res) => {
   }
 };
 
+// GET /api/lessons/stuck-feedbacks — admin view of every lesson still
+// awaiting intern feedback. Used by the admin "Застрявшие фидбеки" page
+// to spot and unblock stuck interns.
+exports.getStuckFeedbacks = async (req, res) => {
+  try {
+    const lessons = await Lesson.find({
+      "internFeedback.submittedAt": { $exists: false },
+    })
+      .populate("intern", "name lastName")
+      .populate("mentor", "name lastName")
+      .sort({ createdAt: 1 })
+      .lean();
+    res.json(lessons);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// POST /api/lessons/:id/force-feedback — admin unblocks a stuck intern by
+// stamping internFeedback.submittedAt so the lesson no longer appears in
+// /lessons/pending-feedback. Used when the intern is unable to submit via
+// the normal flow (broken criteria catalog, deleted lesson metadata, etc).
+exports.forceCloseInternFeedback = async (req, res) => {
+  try {
+    const lesson = await Lesson.findById(req.params.id);
+    if (!lesson) return res.status(404).json({ message: "Урок не найден" });
+
+    if (lesson.internFeedback?.submittedAt) {
+      return res.json({ message: "Фидбек уже был закрыт", lesson });
+    }
+
+    lesson.internFeedback = {
+      criteria: [],
+      score: 5,
+      comment: `admin-force-closed by ${req.user?.name || req.user?.id}${req.body?.note ? `: ${String(req.body.note).slice(0, 200)}` : ""}`,
+      submittedAt: new Date(),
+    };
+
+    await lesson.save();
+    res.json({ message: "Фидбек принудительно закрыт", lesson });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // PATCH /api/lessons/:id/intern-feedback — intern submits feedback on their lesson
 exports.submitInternFeedback = async (req, res) => {
   try {

@@ -230,6 +230,12 @@ exports.deleteIntern = catchAsync(async (req, res) => {
 
 exports.rateIntern = catchAsync(async (req, res) => {
   const { lessonId, stars, feedback, violations } = req.body;
+
+  const starsNum = Number(stars);
+  if (!Number.isFinite(starsNum) || starsNum < 1 || starsNum > 5) {
+    throw new AppError("stars must be a number between 1 and 5", 400);
+  }
+
   // Use req.user.id because auth middleware typically attaches the decoded token (which has 'id') or the user doc (which has '_id')
   // Login payload: { id: mentor._id ... }
   const mentorId = req.user.id || req.user._id;
@@ -237,7 +243,7 @@ exports.rateIntern = catchAsync(async (req, res) => {
   const result = await internService.rateIntern(
     mentorId,
     lessonId,
-    stars,
+    starsNum,
     feedback,
     violations
   );

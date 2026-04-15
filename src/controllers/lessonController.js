@@ -182,6 +182,28 @@ exports.deleteLesson = async (req, res) => {
   }
 };
 
+// GET /api/lessons/pending-feedback — returns the oldest lesson of the current
+// intern that still has no internFeedback submitted. Used by the frontend to
+// self-heal when localStorage lost track of a pending feedback.
+exports.getPendingFeedback = async (req, res) => {
+  try {
+    if (req.user?.role !== "intern") {
+      return res.status(403).json({ message: "Только для интернов" });
+    }
+    const lesson = await Lesson.findOne({
+      intern: req.user.id,
+      "internFeedback.submittedAt": { $exists: false },
+    })
+      .sort({ createdAt: 1 })
+      .select("_id mentor topic date")
+      .lean();
+    if (!lesson) return res.json({ pending: null });
+    return res.json({ pending: lesson });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // PATCH /api/lessons/:id/intern-feedback — intern submits feedback on their lesson
 exports.submitInternFeedback = async (req, res) => {
   try {

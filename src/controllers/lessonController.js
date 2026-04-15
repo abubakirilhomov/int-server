@@ -278,12 +278,15 @@ exports.getAttendanceStats = async (req, res) => {
         lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       }
     } else if (period === "week") {
+      // Monday through Sunday, inclusive. Sunday is a non-working day in the
+      // plan logic but should still appear in week-scoped stats, otherwise
+      // Sunday lessons are silently dropped from the report.
       const dayOfWeek = now.getDay();
       const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       firstDay = new Date(now);
       firstDay.setDate(now.getDate() - daysToMonday);
       lastDay = new Date(firstDay);
-      lastDay.setDate(firstDay.getDate() + 5);
+      lastDay.setDate(firstDay.getDate() + 6);
     } else if (startDate && endDate) {
       firstDay = new Date(startDate);
       lastDay = new Date(endDate);

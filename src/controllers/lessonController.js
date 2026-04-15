@@ -5,6 +5,14 @@ const grades = require("../config/grades.js");
 const GradeConfig = require("../models/gradeConfigModel");
 const { sendNotificationToUser } = require("./notificationController.js");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
+
+// Only lessons younger than this window force an intern to leave feedback.
+// Anything older is grandfathered: it still appears on the admin "stuck
+// feedbacks" page, but it does NOT block the intern from adding new
+// lessons and it does NOT auto-open the feedback modal.
+const FEEDBACK_REQUIRED_WINDOW_MS = 48 * 60 * 60 * 1000;
+const feedbackWindowStart = () =>
+  new Date(Date.now() - FEEDBACK_REQUIRED_WINDOW_MS);
 // Создать урок
 exports.createLesson = async (req, res) => {
   try {
@@ -25,10 +33,15 @@ exports.createLesson = async (req, res) => {
         });
       }
 
-      // Block adding a new lesson until the previous one has internFeedback submitted
+      // Block adding a new lesson only if the intern has a RECENT pending
+      // feedback. Older lessons are grandfathered to avoid an endless
+      // modal cascade when an intern has a historical backlog of unrated
+      // lessons from before the feedback feature shipped or from a time
+      // when the submission path was broken.
       const pendingFeedback = await Lesson.findOne({
         intern: req.user.id,
         "internFeedback.submittedAt": { $exists: false },
+        createdAt: { $gte: feedbackWindowStart() },
       })
         .sort({ createdAt: -1 })
         .lean();
@@ -193,6 +206,7 @@ exports.getPendingFeedback = async (req, res) => {
     const lesson = await Lesson.findOne({
       intern: req.user.id,
       "internFeedback.submittedAt": { $exists: false },
+      createdAt: { $gte: feedbackWindowStart() },
     })
       .sort({ createdAt: 1 })
       .select("_id mentor topic date")

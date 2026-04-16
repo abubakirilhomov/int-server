@@ -1,11 +1,12 @@
 const Branch = require('../models/branchModel');
 
 const pickBranchFields = (body) => {
-  const { name, city, address, location, interviews } = body || {};
+  const { name, city, address, location, telegramLink, interviews } = body || {};
   const data = {};
   if (name !== undefined) data.name = name;
   if (city !== undefined) data.city = city;
   if (address !== undefined) data.address = address;
+  if (telegramLink !== undefined) data.telegramLink = telegramLink;
   if (interviews !== undefined) data.interviews = interviews;
   if (location !== undefined) {
     if (location === null) {

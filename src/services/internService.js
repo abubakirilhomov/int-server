@@ -117,7 +117,7 @@ class InternService {
 
     async getRatings() {
         const interns = await Intern.find()
-            .populate("branches.branch", "name")
+            .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name");
 
         const internRatings = interns.map((intern) => {
@@ -200,7 +200,7 @@ class InternService {
         // 🔹 Если админ и указан ID → можно смотреть чужой профиль
         if (user?.role === "admin" && id) {
             intern = await Intern.findById(id)
-                .populate("branches.branch", "name")
+                .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
         } else {
             const internId = user?._id || id;
@@ -209,7 +209,7 @@ class InternService {
             }
 
             intern = await Intern.findById(internId)
-                .populate("branches.branch", "name")
+                .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
         }
 
@@ -292,7 +292,7 @@ class InternService {
 
         if (user?.role === "admin") {
             const interns = await Intern.find()
-                .populate("branches.branch", "name")
+                .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
             return applyPlanStatus(interns);
         }
@@ -303,7 +303,7 @@ class InternService {
         }
 
         const interns = await Intern.find({ "branches.branch": branchId })
-            .populate("branches.branch", "name")
+            .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
         return applyPlanStatus(interns);
     }
@@ -396,7 +396,7 @@ class InternService {
         }
 
         const interns = await Intern.find({ "branches.branch": branchId })
-            .populate("branches.branch", "name")
+            .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName profilePhoto")
             .sort({ createdAt: -1 });
 
@@ -430,7 +430,7 @@ class InternService {
             throw new AppError("Добавьте текст жалобы или выберите правило", 400);
         }
 
-        const intern = await Intern.findById(targetInternId).populate("branches.branch", "name");
+        const intern = await Intern.findById(targetInternId).populate("branches.branch", "name telegramLink");
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
         const activeBranchId = user.activeBranchId || user.branchId;
@@ -774,7 +774,7 @@ class InternService {
     }
 
     async setHeadIntern(id, isHeadIntern, branchId) {
-        const intern = await Intern.findById(id).populate("branches.branch", "name");
+        const intern = await Intern.findById(id).populate("branches.branch", "name telegramLink");
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
         // Determine which branch to update
@@ -854,7 +854,7 @@ class InternService {
 
     async getInternsRating() {
         const interns = await Intern.find()
-            .populate("branches.branch", "name")
+            .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
 
         const now = new Date();

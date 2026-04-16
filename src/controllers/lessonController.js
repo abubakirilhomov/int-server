@@ -355,7 +355,7 @@ exports.getAttendanceStats = async (req, res) => {
     const [interns, lessonAgg, gradeConfigsFromDB] = await Promise.all([
       Intern.find()
         .select("name lastName grade branches probationStartDate createdAt isHeadIntern bonusLessons")
-        .populate("branches.branch", "name")
+        .populate("branches.branch", "name telegramLink")
         .lean(),
 
       // Считаем уроки прямо в MongoDB — не грузим все документы в JS

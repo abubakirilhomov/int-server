@@ -130,7 +130,7 @@ exports.getPendingInterns = async (req, res) => {
     const interns = await Intern.find({
       "pendingMentors.mentorId": mentorId,
     })
-      .populate("branches.branch", "name")
+      .populate("branches.branch", "name telegramLink")
       .populate("branches.mentor", "name lastName")
       .populate("pendingMentors.lessonId", "topic date time group");
 

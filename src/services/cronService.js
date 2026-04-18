@@ -4,6 +4,7 @@ const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
 const Subscription = require("../models/subscriptionModel");
 const Intern = require("../models/internModel");
+const { resetStaleStreaks } = require("./streakService");
 
 // Настройка web-push (ключи должны быть в .env)
 const publicVapidKey = process.env.VAPID_PUBLIC_KEY;
@@ -25,6 +26,8 @@ class CronService {
             try {
                 await this.notifyMentorsWithDebt();
                 await this.notifyInternsWithPendingLessons();
+                const reset = await resetStaleStreaks();
+                if (reset > 0) console.log(`🔥 Reset ${reset} stale streaks`);
             } catch (error) {
                 console.error("❌ Error in daily cron job:", error);
             }

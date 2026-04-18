@@ -534,9 +534,13 @@ class InternService {
 
         const intern = await Intern.findById(lesson.intern._id);
 
-        // Добавляем новый отзыв
+        const Mentor = require("../models/mentorModel");
+        const mentorDoc = await Mentor.findById(mentorId).select("name lastName").lean();
+        const mentorName = mentorDoc ? `${mentorDoc.name || ""} ${mentorDoc.lastName || ""}`.trim() : "";
+
         intern.feedbacks.push({
             mentorId,
+            mentorName,
             stars,
             feedback,
         });

@@ -194,6 +194,16 @@ class InternService {
         };
     }
 
+    async getInternRank(internId) {
+        const { interns } = await this.getRatings();
+        const idx = interns.findIndex((i) => i.internId.toString() === internId.toString());
+        const total = interns.length;
+        if (idx === -1 || total === 0) return { rank: 0, percentile: 0, totalInterns: total };
+        const rank = idx + 1;
+        const percentile = Math.round(((total - rank) / total) * 100);
+        return { rank, percentile, totalInterns: total };
+    }
+
     async getInternProfile(user, id) {
         let intern;
 

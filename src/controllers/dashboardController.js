@@ -259,6 +259,12 @@ exports.getDashboardStats = async (req, res) => {
                 current: user.currentStreak || 0,
                 longest: user.longestStreak || 0,
             },
+            ranking: await (async () => {
+                try {
+                    const InternService = require("../services/internService");
+                    return await InternService.getInternRank(userId);
+                } catch { return { rank: 0, percentile: 0, totalInterns: 0 }; }
+            })(),
             badges: user.badges || [],
             xp: user.xp || 0,
             level: user.level || 1,

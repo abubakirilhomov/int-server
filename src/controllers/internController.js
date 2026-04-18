@@ -10,6 +10,7 @@ const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const internService = require("../services/internService");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
+const { getAllBadgeStatuses } = require("../services/badgeService");
 
 exports.loginIntern = async (req, res) => {
   try {
@@ -354,4 +355,10 @@ exports.changePassword = catchAsync(async (req, res) => {
   await intern.save();
 
   res.json({ success: true, message: "Password changed successfully" });
+});
+
+
+exports.getMyBadges = catchAsync(async (req, res) => {
+  const badges = await getAllBadgeStatuses(req.user.id);
+  res.json({ badges });
 });

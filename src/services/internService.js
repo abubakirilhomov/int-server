@@ -567,6 +567,10 @@ class InternService {
         lesson.status = "confirmed";
         await lesson.save();
 
+        // Check badges after rating (fire-and-forget)
+        const { checkAndAwardBadges } = require("./badgeService");
+        checkAndAwardBadges(intern._id).catch(() => {});
+
         return {
             message: "Стажёр успешно оценён",
             score: intern.score.toFixed(1),

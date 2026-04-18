@@ -6,6 +6,7 @@ const GradeConfig = require("../models/gradeConfigModel");
 const { sendNotificationToUser } = require("./notificationController.js");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { updateStreak } = require("../services/streakService");
+const { checkAndAwardBadges } = require("../services/badgeService");
 
 // Only lessons younger than this window force an intern to leave feedback.
 // Anything older is grandfathered: it still appears on the admin "stuck
@@ -77,9 +78,11 @@ exports.createLesson = async (req, res) => {
 
     const lesson = await Lesson.create(payload);
 
-    // Update streak (fire-and-forget, don't block response)
+    // Update streak + check badges (fire-and-forget)
     if (lesson.intern) {
-      updateStreak(lesson.intern).catch(() => {});
+      updateStreak(lesson.intern)
+        .then(() => checkAndAwardBadges(lesson.intern))
+        .catch(() => {});
     }
 
     // После создания урока — обновляем посещения интерна

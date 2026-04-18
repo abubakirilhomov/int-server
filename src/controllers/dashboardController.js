@@ -259,6 +259,12 @@ exports.getDashboardStats = async (req, res) => {
                 current: user.currentStreak || 0,
                 longest: user.longestStreak || 0,
             },
+            weeklyChampion: await (async () => {
+                try {
+                    const { getCurrentChampion } = require("../services/championService");
+                    return await getCurrentChampion();
+                } catch { return null; }
+            })(),
             ranking: await (async () => {
                 try {
                     const InternService = require("../services/internService");

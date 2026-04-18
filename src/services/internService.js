@@ -577,8 +577,10 @@ class InternService {
         lesson.status = "confirmed";
         await lesson.save();
 
-        // Check badges after rating (fire-and-forget)
+        // XP bonus for 5-star + check badges (fire-and-forget)
         const { checkAndAwardBadges } = require("./badgeService");
+        const { awardXP, XP_REWARDS } = require("./xpService");
+        if (stars === 5) awardXP(intern._id, XP_REWARDS.fiveStarFeedback).catch(() => {});
         checkAndAwardBadges(intern._id).catch(() => {});
 
         return {

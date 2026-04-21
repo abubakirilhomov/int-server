@@ -20,7 +20,9 @@ exports.loginIntern = async (req, res) => {
         .status(400)
         .json({ error: "Имя пользователя и пароль обязательны" });
     }
-    const intern = await Intern.findOne({ username }).select("+password");
+    const intern = await Intern.findOne({ username })
+      .select("+password")
+      .populate("branches.branch", "name");
     if (!intern) {
       return res
         .status(401)
@@ -34,12 +36,13 @@ exports.loginIntern = async (req, res) => {
         .json({ error: "Неверное имя пользователя или пароль" });
     }
 
+    const branchIds = intern.branches.map((b) => b.branch?._id || b.branch);
     const token = jwt.sign(
       {
         id: intern._id,
         role: "intern",
-        branchIds: intern.branches.map((b) => b.branch),
-        branchId: intern.branches[0]?.branch || null,
+        branchIds,
+        branchId: branchIds[0] || null,
         isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
       },
       process.env.JWT_SECRET,
@@ -61,8 +64,9 @@ exports.loginIntern = async (req, res) => {
         lastName: intern.lastName,
         username: intern.username,
         role: "intern",
-        branchIds: intern.branches.map((b) => b.branch),
-        branchId: intern.branches[0]?.branch || null,
+        branchIds,
+        branchId: branchIds[0] || null,
+        branches: intern.branches,
         isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
         phoneNumber: intern.phoneNumber || "",
         telegram: intern.telegram || "",

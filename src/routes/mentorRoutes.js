@@ -19,4 +19,8 @@ router.get("/:id/stats", authMiddleware, mentorController.getMentorStats);
 router.get("/debt/all", authMiddleware, isAdmin, mentorController.getAllMentorsDebt);
 router.get("/:id/debt-details", authMiddleware, isAdmin, mentorController.getMentorDebtDetails);
 
+// Admin-only routes for mentor/intern activity overview
+router.get("/with-activity", authMiddleware, isAdmin, mentorController.getMentorsActivity);
+router.get("/:id/interns-activity", authMiddleware, isAdmin, mentorController.getInternsActivity);
+
 module.exports = router;

@@ -226,6 +226,16 @@ exports.getMentorDebtDetails = catchAsync(async (req, res) => {
   });
 });
 
+exports.getMentorsActivity = catchAsync(async (req, res) => {
+  const data = await mentorService.getMentorsWithActivity();
+  res.json({ success: true, data });
+});
+
+exports.getInternsActivity = catchAsync(async (req, res) => {
+  const data = await mentorService.getInternsActivityForMentor(req.params.id);
+  res.json({ success: true, data });
+});
+
 exports.changePassword = catchAsync(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {

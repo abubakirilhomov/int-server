@@ -25,6 +25,13 @@ const internSchema = new mongoose.Schema({
     default: "backend-nodejs",
   },
   profilePhoto: { type: String, trim: true, default: "" },
+  marsId: {
+    sub: { type: String, index: { unique: true, sparse: true } },
+    handle: { type: String, trim: true },
+    tg: { type: String, trim: true },
+    email: { type: String, trim: true, lowercase: true },
+    linkedAt: { type: Date },
+  },
   branches: [
     {
       branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: true },

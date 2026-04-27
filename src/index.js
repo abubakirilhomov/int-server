@@ -11,6 +11,14 @@ const envSchema = Joi.object({
   PORT:                Joi.number().default(3000),
   NODE_ENV:            Joi.string().valid("development", "production", "test").default("development"),
   CORS_ORIGINS:        Joi.string().optional(), // comma-separated list
+  // Mars ID OIDC (optional — feature is gated, disabled when missing)
+  MARS_ID_ISSUER:                 Joi.string().uri().optional(),
+  MARS_ID_CLIENT_ID:              Joi.string().optional(),
+  MARS_ID_CLIENT_SECRET:          Joi.string().optional(),
+  MARS_ID_REDIRECT_URI:           Joi.string().uri().optional(),
+  MARS_ID_RETURN_URL_MENTORS:     Joi.string().uri().optional(),
+  MARS_ID_RETURN_URL_INTERNS:     Joi.string().uri().optional(),
+  MARS_ID_RETURN_URL_ADMIN:       Joi.string().uri().optional(),
 }).unknown(true);
 
 const { error: envError } = envSchema.validate(process.env);
@@ -107,6 +115,7 @@ app.use("/api/locations", require("./routes/locationRoutes"));
 app.use("/api/grade-config", require("./routes/gradeConfigRoutes"));
 app.use("/api/settings", require("./routes/settingsRoutes"));
 app.use("/api/lesson-criteria", require("./routes/lessonCriteriaRoutes"));
+app.use("/api/auth/marsid", require("./routes/marsIdAuthRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

@@ -11,6 +11,13 @@ const mentorSchema = new mongoose.Schema({
     enum: ['mentor', 'admin', 'branchManager'],
     default: 'mentor'
   },
+  marsId: {
+    sub: { type: String, index: { unique: true, sparse: true } },
+    handle: { type: String, trim: true },
+    tg: { type: String, trim: true },
+    email: { type: String, trim: true, lowercase: true },
+    linkedAt: { type: Date },
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

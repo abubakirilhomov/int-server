@@ -224,9 +224,9 @@ exports.link = catchAsync(async (req, res) => {
   if (!marsIdService.isConfigured()) {
     throw new AppError("Mars ID не настроен на этом окружении", 503);
   }
-  const { linkageToken, username, password } = req.body || {};
-  if (!linkageToken || !username || !password) {
-    throw new AppError("linkageToken, username и password обязательны", 400);
+  const { linkageToken, name, lastName, username, password } = req.body || {};
+  if (!linkageToken || !password) {
+    throw new AppError("linkageToken и password обязательны", 400);
   }
 
   let claims;
@@ -241,12 +241,18 @@ exports.link = catchAsync(async (req, res) => {
     throw new AppError("Невалидный kind в linkage token", 400);
   }
 
-  // Authenticate via existing creds
+  // Authenticate via existing creds (matches each app's login schema)
   let user;
   if (kind === "mentor") {
-    const candidates = await Mentor.find({
-      $or: [{ name: username.trim() }, { lastName: username.trim() }],
-    }).select("+password");
+    const trimmedName = String(name || "").trim();
+    const trimmedLast = String(lastName || "").trim();
+    if (!trimmedName) {
+      throw new AppError("name обязателен для ментора", 400);
+    }
+    const query = trimmedLast
+      ? { name: trimmedName, lastName: trimmedLast }
+      : { name: trimmedName };
+    const candidates = await Mentor.find(query).select("+password");
     for (const c of candidates) {
       if (c.password && (await bcrypt.compare(password, c.password))) {
         user = c;
@@ -254,7 +260,11 @@ exports.link = catchAsync(async (req, res) => {
       }
     }
   } else {
-    const candidate = await Intern.findOne({ username: username.trim() }).select("+password");
+    const trimmedUsername = String(username || "").trim();
+    if (!trimmedUsername) {
+      throw new AppError("username обязателен для интерна", 400);
+    }
+    const candidate = await Intern.findOne({ username: trimmedUsername }).select("+password");
     if (candidate && candidate.password && (await bcrypt.compare(password, candidate.password))) {
       user = candidate;
     }

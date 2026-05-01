@@ -166,6 +166,47 @@ const internSchema = new mongoose.Schema({
       note: { type: String, trim: true },
     },
   ],
+
+  // Жизненный цикл интерна: active (по умолчанию), frozen (временная пауза, см. freezeInfo),
+  // archived (постоянно скрыт из активных списков, см. archiveInfo). Все запросы рейтингов,
+  // дашбордов и кронов фильтруют по этому полю — см. CLAUDE.md.
+  status: {
+    type: String,
+    enum: ["active", "frozen", "archived"],
+    default: "active",
+    index: true,
+  },
+  freezeInfo: {
+    startedAt: { type: Date },
+    expectedReturn: { type: Date },
+    reason: {
+      type: String,
+      enum: ["sick", "vacation", "personal", "other"],
+      default: "other",
+    },
+    note: { type: String, trim: true, default: "" },
+    frozenBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+    // Накопленная сумма дней заморозки за все периоды (для статистики)
+    totalFrozenDays: { type: Number, default: 0 },
+  },
+  archiveInfo: {
+    archivedAt: { type: Date },
+    reason: {
+      type: String,
+      enum: ["promoted_to_tutor", "left", "other"],
+      default: "other",
+    },
+    note: { type: String, trim: true, default: "" },
+    archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+    becameTutor: { type: Boolean, default: false },
+    tutorMentorId: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor" },
+    // Снимок грейда на момент архивации — нужен потому что в архиве grade остаётся,
+    // но мы хотим явно зафиксировать "финальный" грейд для отчётов.
+    finalGrade: {
+      type: String,
+      enum: ["junior", "strongJunior", "middle", "strongMiddle", "senior"],
+    },
+  },
 });
 
 // Virtuals for backward compatibility

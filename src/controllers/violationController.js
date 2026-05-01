@@ -5,6 +5,10 @@ exports.getViolations = catchAsync(async (req, res) => {
     const { branch, startDate, endDate, category } = req.query;
 
     const pipeline = [
+        // 0. Общий список нарушений — только активные стажёры. История
+        // замороженных/архивных сохраняется в карточке и архиве.
+        { $match: { status: "active" } },
+
         // 1. Разворачиваем массив violations для каждого интерна
         { $unwind: "$violations" },
 

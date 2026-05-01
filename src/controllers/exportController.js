@@ -7,6 +7,13 @@ exports.createIntern = async (req, res) => {
 
 exports.getInterns = async (req, res) => {
   const filter = req.query.branch ? { "branches.branch": req.query.branch } : {};
+  // Экспорт по умолчанию отдаёт только активных. Передайте ?includeFrozen=1
+  // или ?includeArchived=1, если нужен расширенный исторический экспорт.
+  if (!req.query.includeArchived) {
+    filter.status = req.query.includeFrozen
+      ? { $ne: "archived" }
+      : "active";
+  }
   const interns = await Intern.find(filter);
   res.json(interns);
 };

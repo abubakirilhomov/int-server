@@ -27,6 +27,15 @@ exports.createLesson = async (req, res) => {
       if (!intern) {
         return res.status(404).json({ message: "Стажёр не найден" });
       }
+      if (intern.status === "archived") {
+        return res.status(403).json({ message: "Аккаунт архивирован" });
+      }
+      if (intern.status === "frozen") {
+        return res.status(403).json({
+          message: "Аккаунт временно заморожен. Создание уроков недоступно.",
+          freezeInfo: intern.freezeInfo || null,
+        });
+      }
       const planStatus = await getInternPlanStatus(intern);
       if (planStatus.isPlanBlocked) {
         return res.status(403).json({
@@ -164,14 +173,15 @@ exports.getPendingLessons = async (req, res) => {
     const lessons = await Lesson.find({ mentor: mentorId, status: "pending" })
       .populate(
         "intern",
-        "name lastName username branch grade score lessonsVisited feedbacks"
+        "name lastName username branch grade score lessonsVisited feedbacks status freezeInfo"
       )
       .sort({ createdAt: -1 });
 
     const interns = lessons
-      .filter((l) => l.intern) // ✅ защищает от populate(null)
+      .filter((l) => l.intern && l.intern.status !== "archived")
       .map((l) => ({
         ...l.intern.toObject(),
+        isFrozen: l.intern.status === "frozen",
         lessonId: l._id,
         topic: l.topic,
         time: l.time,
@@ -215,6 +225,10 @@ exports.getPendingFeedback = async (req, res) => {
   try {
     if (req.user?.role !== "intern") {
       return res.status(403).json({ message: "Только для интернов" });
+    }
+    const intern = await Intern.findById(req.user.id).select("status").lean();
+    if (!intern || intern.status !== "active") {
+      return res.json({ pending: null });
     }
     const lesson = await Lesson.findOne({
       intern: req.user.id,
@@ -366,7 +380,7 @@ exports.getAttendanceStats = async (req, res) => {
 
     // 🔹 Параллельно грузим интернов, уроки (агрегация) и конфиги грейдов
     const [interns, lessonAgg, gradeConfigsFromDB] = await Promise.all([
-      Intern.find()
+      Intern.find({ status: "active" })
         .select("name lastName grade branches probationStartDate createdAt isHeadIntern bonusLessons")
         .populate("branches.branch", "name telegramLink")
         .lean(),

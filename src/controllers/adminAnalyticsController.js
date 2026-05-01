@@ -7,7 +7,12 @@ exports.getAnalytics = async (req, res) => {
     const now = new Date();
 
     // ── 1. Grade distribution ──
+    // Аналитика считает только активных: замороженные на паузе, архивные уже
+    // не часть текущей программы стажировки.
+    const ACTIVE_FILTER = { status: "active" };
+
     const gradeDistribution = await Intern.aggregate([
+      { $match: ACTIVE_FILTER },
       { $group: { _id: "$grade", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -41,6 +46,7 @@ exports.getAnalytics = async (req, res) => {
 
     // ── 3. Branch comparison ──
     const branchStats = await Intern.aggregate([
+      { $match: ACTIVE_FILTER },
       { $unwind: "$branches" },
       {
         $lookup: {
@@ -63,14 +69,14 @@ exports.getAnalytics = async (req, res) => {
     ]);
 
     // ── 4. Top interns by score ──
-    const topInterns = await Intern.find({ score: { $gt: 0 } })
+    const topInterns = await Intern.find({ score: { $gt: 0 }, ...ACTIVE_FILTER })
       .select("name lastName score grade profilePhoto")
       .sort({ score: -1 })
       .limit(5)
       .lean();
 
     // ── 5. Summary stats ──
-    const totalInterns = await Intern.countDocuments();
+    const totalInterns = await Intern.countDocuments(ACTIVE_FILTER);
     const totalMentors = await Mentor.countDocuments();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lessonsThisMonth = await Lesson.countDocuments({ date: { $gte: thisMonthStart } });
@@ -81,6 +87,7 @@ exports.getAnalytics = async (req, res) => {
 
     // ── 6. Violation trend (last 6 months) ──
     const violationTrend = await Intern.aggregate([
+      { $match: ACTIVE_FILTER },
       { $unwind: "$violations" },
       { $match: { "violations.date": { $gte: sixMonthsAgo } } },
       {

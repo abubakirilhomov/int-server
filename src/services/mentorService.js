@@ -1,5 +1,6 @@
 const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
+const Intern = require("../models/internModel");
 const AppError = require("../utils/AppError");
 
 const ACTIVITY_WINDOW_DAYS = 30;
@@ -82,10 +83,12 @@ class MentorService {
             mentor: mentorId,
             status: "pending", // или isRated: false
         })
-            .populate("intern", "name lastName");
+            .populate("intern", "name lastName status");
+
+        const activePendingLessons = pendingLessons.filter((l) => l.intern?.status === "active");
 
         // Формируем список должников для отображения
-        const debtDetails = pendingLessons.map(l => ({
+        const debtDetails = activePendingLessons.map(l => ({
             lessonId: l._id,
             internName: l.intern ? `${l.intern.name} ${l.intern.lastName}` : "Unknown",
             date: l.date,
@@ -106,7 +109,7 @@ class MentorService {
         return {
             monthLessons,
             monthFeedbacks,
-            totalDebt: pendingLessons.length,
+            totalDebt: activePendingLessons.length,
             debtDetails,
             qualityScore,
             qualityFeedbackCount: feedbackLessons.length,
@@ -114,18 +117,17 @@ class MentorService {
     }
 
     async getAllMentorsWithDebt() {
-        const Mentor = require("../models/mentorModel");
-        const Lesson = require("../models/lessonModel");
-
         // Get all mentors
         const mentors = await Mentor.find().select("name lastName branch");
+        const activeInternIds = await Intern.find({ status: "active" }).distinct("_id");
 
         // Calculate debt for each mentor
         const mentorsWithDebt = await Promise.all(
             mentors.map(async (mentor) => {
                 const debtCount = await Lesson.countDocuments({
                     mentor: mentor._id,
-                    status: "pending"
+                    status: "pending",
+                    intern: { $in: activeInternIds },
                 });
 
                 return {
@@ -148,16 +150,16 @@ class MentorService {
     }
 
     async getMentorDebtDetails(mentorId) {
-        const Lesson = require("../models/lessonModel");
-
         const pendingLessons = await Lesson.find({
             mentor: mentorId,
             status: "pending"
         })
-            .populate("intern", "name lastName grade")
+            .populate("intern", "name lastName grade status")
             .sort({ date: -1 });
 
-        return pendingLessons.map(lesson => ({
+        return pendingLessons
+          .filter((lesson) => lesson.intern?.status === "active")
+          .map(lesson => ({
             lessonId: lesson._id,
             intern: {
                 _id: lesson.intern._id,
@@ -184,7 +186,12 @@ class MentorService {
             .populate("branches", "name")
             .lean();
 
-        const interns = await Intern.find({ "branches.0": { $exists: true } })
+        // mentor-quality / activity сводки исключают замороженных и архивных:
+        // их активность равна нулю по дизайну, что портит средние ментора.
+        const interns = await Intern.find({
+            "branches.0": { $exists: true },
+            status: "active",
+        })
             .select("name lastName grade sphere lessonsPerMonth branches")
             .lean();
 
@@ -289,7 +296,10 @@ class MentorService {
         const windowStart = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * 24 * 3600 * 1000);
         const totalWorkingDays = countWorkingDaysInclusive(windowStart, now);
 
-        const interns = await Intern.find({ "branches.mentor": mid })
+        const interns = await Intern.find({
+            "branches.mentor": mid,
+            status: "active",
+        })
             .select("name lastName username grade sphere profilePhoto lessonsPerMonth branches")
             .populate("branches.branch", "name")
             .lean();

@@ -52,9 +52,10 @@ exports.getMentorInternLocations = async (req, res) => {
       return res.json({ data: [] });
     }
 
-    // Find all interns in those branches (regardless of which mentor they belong to)
+    // Find all interns in those branches (regardless of which mentor they belong to).
+    // Архивных и замороженных не показываем на карте локаций — они не в работе.
     const interns = await Intern.find(
-      { "branches.branch": { $in: branchIds } },
+      { "branches.branch": { $in: branchIds }, status: "active" },
       { _id: 1, name: 1, lastName: 1, grade: 1, profilePhoto: 1 }
     ).lean();
 

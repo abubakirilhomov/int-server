@@ -116,7 +116,8 @@ class InternService {
     }
 
     async getRatings() {
-        const interns = await Intern.find()
+        // Архивные и замороженные исключены: рейтинг показывает только активных.
+        const interns = await Intern.find({ status: "active" })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name");
 
@@ -270,6 +271,13 @@ class InternService {
             mentor: intern.branches?.[0]?.mentor || null,
             score: intern.score,
             grade: intern.grade,
+            status: intern.status || "active",
+            isFrozen: intern.status === "frozen",
+            isArchived: intern.status === "archived",
+            freezeInfo: intern.status === "frozen" ? intern.freezeInfo || null : null,
+            archiveInfo: intern.status === "archived" || user?.role === "admin"
+                ? intern.archiveInfo || null
+                : null,
             goal,
             lessonsVisited: intern.lessonsVisited,
             feedbacks: safeFeedbacks,
@@ -300,8 +308,13 @@ class InternService {
             );
         };
 
+        // Основной список интернов: показываем активных и замороженных
+        // (заморожённые видны в админке с бейджем). Архивные — скрыты,
+        // для них есть отдельный эндпоинт /interns/archived.
+        const baseFilter = { status: { $ne: "archived" } };
+
         if (user?.role === "admin") {
-            const interns = await Intern.find()
+            const interns = await Intern.find(baseFilter)
                 .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
             return applyPlanStatus(interns);
@@ -312,7 +325,7 @@ class InternService {
             throw new AppError("Нет доступа", 403);
         }
 
-        const interns = await Intern.find({ "branches.branch": branchId })
+        const interns = await Intern.find({ ...baseFilter, "branches.branch": branchId })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
         return applyPlanStatus(interns);
@@ -405,7 +418,10 @@ class InternService {
             throw new AppError("Не найден филиал в токене", 400);
         }
 
-        const interns = await Intern.find({ "branches.branch": branchId })
+        const interns = await Intern.find({
+            "branches.branch": branchId,
+            status: { $ne: "archived" },
+        })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName profilePhoto")
             .sort({ createdAt: -1 });
@@ -493,6 +509,148 @@ class InternService {
         };
     }
 
+    async freezeIntern(id, { reason, note, expectedReturn, adminId } = {}) {
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (intern.status === "archived") {
+            throw new AppError("Архивный стажёр не может быть заморожен", 400);
+        }
+        if (intern.status === "frozen") {
+            throw new AppError("Стажёр уже заморожен", 400);
+        }
+
+        intern.status = "frozen";
+        intern.freezeInfo = {
+            ...(intern.freezeInfo?.toObject ? intern.freezeInfo.toObject() : intern.freezeInfo || {}),
+            startedAt: new Date(),
+            expectedReturn: expectedReturn ? new Date(expectedReturn) : null,
+            reason: reason || "other",
+            note: note || "",
+            frozenBy: adminId || null,
+            totalFrozenDays: intern.freezeInfo?.totalFrozenDays || 0,
+        };
+
+        await intern.save();
+        return { message: "Стажёр заморожен", intern };
+    }
+
+    async unfreezeIntern(id) {
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (intern.status !== "frozen") {
+            throw new AppError("Стажёр не находится в заморозке", 400);
+        }
+
+        const startedAt = intern.freezeInfo?.startedAt
+            ? new Date(intern.freezeInfo.startedAt)
+            : null;
+        const now = new Date();
+
+        // Сдвигаем probationStartDate на длительность заморозки, чтобы интерн
+        // не был оштрафован за пропущенные дни. Также сохраняем суммарное
+        // количество замороженных дней в freezeInfo.totalFrozenDays.
+        if (startedAt) {
+            const frozenMs = Math.max(0, now.getTime() - startedAt.getTime());
+            const frozenDays = Math.round(frozenMs / 86400000);
+
+            const probationBase = intern.probationStartDate
+                ? new Date(intern.probationStartDate)
+                : null;
+            if (probationBase) {
+                probationBase.setTime(probationBase.getTime() + frozenMs);
+                intern.probationStartDate = probationBase;
+            }
+
+            intern.freezeInfo = {
+                ...(intern.freezeInfo?.toObject ? intern.freezeInfo.toObject() : intern.freezeInfo || {}),
+                totalFrozenDays: (intern.freezeInfo?.totalFrozenDays || 0) + frozenDays,
+                startedAt: null,
+                expectedReturn: null,
+            };
+        }
+
+        intern.status = "active";
+        await intern.save();
+
+        return { message: "Стажёр разморожен", intern };
+    }
+
+    async archiveIntern(id, { reason, note, becameTutor, tutorMentorId, adminId } = {}) {
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (intern.status === "archived") {
+            throw new AppError("Стажёр уже в архиве", 400);
+        }
+
+        // Архивирование из заморозки разрешено: по сути замороженный интерн
+        // просто переходит в постоянное закрытое состояние. probationStartDate
+        // не корректируем — для архивных он не используется.
+
+        if (becameTutor && tutorMentorId) {
+            const mentorExists = await Mentor.findById(tutorMentorId);
+            if (!mentorExists) {
+                throw new AppError("Указанный ментор не найден", 400);
+            }
+        }
+
+        intern.status = "archived";
+        intern.archiveInfo = {
+            archivedAt: new Date(),
+            reason: reason || "other",
+            note: note || "",
+            archivedBy: adminId || null,
+            becameTutor: Boolean(becameTutor),
+            tutorMentorId: becameTutor && tutorMentorId ? tutorMentorId : null,
+            finalGrade: intern.grade,
+        };
+
+        // Чистим manualActivation чтобы не висели стейлы у архивных
+        intern.manualActivation = {
+            isEnabled: false,
+            enabledAt: null,
+            enabledBy: null,
+            note: "",
+        };
+
+        await intern.save();
+        return { message: "Стажёр архивирован", intern };
+    }
+
+    async unarchiveIntern(id) {
+        const intern = await Intern.findById(id);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (intern.status !== "archived") {
+            throw new AppError("Стажёр не находится в архиве", 400);
+        }
+
+        intern.status = "active";
+        // archiveInfo оставляем как историю — следующий раз перезапишется при новой архивации.
+        await intern.save();
+
+        return { message: "Стажёр восстановлен из архива", intern };
+    }
+
+    async getFrozenInterns() {
+        return Intern.find({ status: "frozen" })
+            .populate("branches.branch", "name telegramLink")
+            .populate("branches.mentor", "name lastName")
+            .populate("freezeInfo.frozenBy", "name lastName")
+            .sort({ "freezeInfo.startedAt": -1 });
+    }
+
+    async getArchivedInterns() {
+        return Intern.find({ status: "archived" })
+            .populate("branches.branch", "name telegramLink")
+            .populate("branches.mentor", "name lastName")
+            .populate("archiveInfo.archivedBy", "name lastName")
+            .populate("archiveInfo.tutorMentorId", "name lastName profilePhoto")
+            .sort({ "archiveInfo.archivedAt": -1 });
+    }
+
     async setInternActivation(id, { isEnabled, note, adminId }) {
         const intern = await Intern.findById(id);
         if (!intern) throw new AppError("Стажёр не найден", 404);
@@ -543,6 +701,10 @@ class InternService {
         }
 
         const intern = await Intern.findById(lesson.intern._id);
+
+        if (intern?.status === "archived") {
+            throw new AppError("Нельзя оценить урок архивного стажёра", 403);
+        }
 
         const Mentor = require("../models/mentorModel");
         const mentorDoc = await Mentor.findById(mentorId).select("name lastName").lean();
@@ -595,6 +757,13 @@ class InternService {
 
         const intern = await Intern.findById(internId).populate("lessonsVisited.lessonId");
         if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        if (intern.status === "archived") {
+            throw new AppError("Стажёр архивирован — создание уроков недоступно", 403);
+        }
+        if (intern.status === "frozen") {
+            throw new AppError("Стажёр заморожен — создание уроков недоступно", 403);
+        }
 
         // 1. Защита от дубликатов (intern + mentor + date)
         // Проверяем начало дня и конец дня, чтобы избежать дублей в один день
@@ -873,7 +1042,9 @@ class InternService {
     }
 
     async getInternsRating() {
-        const interns = await Intern.find()
+        // Рейтинг — только активные. Замороженные не имеют активной нормы,
+        // архивные — скрыты полностью.
+        const interns = await Intern.find({ status: "active" })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
 

@@ -36,6 +36,12 @@ exports.loginIntern = async (req, res) => {
         .json({ error: "Неверное имя пользователя или пароль" });
     }
 
+    if (intern.status === "archived") {
+      return res
+        .status(403)
+        .json({ error: "Аккаунт архивирован. Обратитесь к администратору." });
+    }
+
     const branchIds = intern.branches.map((b) => b.branch?._id || b.branch);
     const token = jwt.sign(
       {
@@ -75,6 +81,14 @@ exports.loginIntern = async (req, res) => {
         avatar: intern.profilePhoto || "",
         isPlanBlocked: planStatus.isPlanBlocked,
         planBlockReason: planStatus.reason,
+        status: intern.status || "active",
+        isFrozen: intern.status === "frozen",
+        freezeInfo: intern.status === "frozen" ? {
+          startedAt: intern.freezeInfo?.startedAt || null,
+          expectedReturn: intern.freezeInfo?.expectedReturn || null,
+          reason: intern.freezeInfo?.reason || null,
+          note: intern.freezeInfo?.note || "",
+        } : null,
       },
     });
   } catch (error) {
@@ -96,6 +110,10 @@ exports.refreshToken = async (req, res) => {
 
     const intern = await Intern.findById(decoded.id);
     if (!intern) return res.status(404).json({ error: "Intern not found" });
+
+    if (intern.status === "archived") {
+      return res.status(403).json({ error: "Аккаунт архивирован" });
+    }
 
     const newToken = jwt.sign(
       {
@@ -131,9 +149,13 @@ exports.getPendingInterns = async (req, res) => {
 
     const mentorId = req.user.id || req.user._id; // Handle both id formats
 
-    // Find all interns who have pending tasks for this mentor
+    // Find all interns who have pending tasks for this mentor.
+    // Архивных не показываем — у замороженных pending уроки могут оставаться
+    // (по решению user'а pending не отменяются при заморозке), поэтому
+    // фронт получает их с признаком status, чтобы отметить бейджем.
     const interns = await Intern.find({
       "pendingMentors.mentorId": mentorId,
+      status: { $ne: "archived" },
     })
       .populate("branches.branch", "name telegramLink")
       .populate("branches.mentor", "name lastName")
@@ -165,6 +187,8 @@ exports.getPendingInterns = async (req, res) => {
           score: intern.score,
           lessonsVisited: intern.lessonsVisited,
           profilePhoto: intern.profilePhoto || "",
+          status: intern.status || "active",
+          isFrozen: intern.status === "frozen",
 
           // Fields from the specific lesson
           lessonId: lesson._id,
@@ -337,6 +361,49 @@ exports.setInternActivation = catchAsync(async (req, res) => {
     note,
     adminId: req.user?.id || req.user?._id,
   });
+  res.json(result);
+});
+
+exports.freezeIntern = catchAsync(async (req, res) => {
+  const { reason, note, expectedReturn } = req.body;
+  const result = await internService.freezeIntern(req.params.id, {
+    reason,
+    note,
+    expectedReturn,
+    adminId: req.user?.id || req.user?._id,
+  });
+  res.json(result);
+});
+
+exports.unfreezeIntern = catchAsync(async (req, res) => {
+  const result = await internService.unfreezeIntern(req.params.id);
+  res.json(result);
+});
+
+exports.archiveIntern = catchAsync(async (req, res) => {
+  const { reason, note, becameTutor, tutorMentorId } = req.body;
+  const result = await internService.archiveIntern(req.params.id, {
+    reason,
+    note,
+    becameTutor,
+    tutorMentorId,
+    adminId: req.user?.id || req.user?._id,
+  });
+  res.json(result);
+});
+
+exports.unarchiveIntern = catchAsync(async (req, res) => {
+  const result = await internService.unarchiveIntern(req.params.id);
+  res.json(result);
+});
+
+exports.getFrozenInterns = catchAsync(async (req, res) => {
+  const result = await internService.getFrozenInterns();
+  res.json(result);
+});
+
+exports.getArchivedInterns = catchAsync(async (req, res) => {
+  const result = await internService.getArchivedInterns();
   res.json(result);
 });
 

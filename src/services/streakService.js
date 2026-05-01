@@ -16,6 +16,18 @@ const prevWorkingDay = (d) => {
 };
 
 async function updateStreak(internId) {
+  const internQuery = Intern.findById(internId);
+  const intern = internQuery?.select
+    ? await internQuery.select("status currentStreak longestStreak")
+    : await internQuery;
+  if (intern?.status && intern.status !== "active") {
+    return {
+      current: intern.currentStreak || 0,
+      longest: intern.longestStreak || 0,
+      skipped: true,
+    };
+  }
+
   const now = new Date();
   const lookback = new Date(now);
   lookback.setDate(lookback.getDate() - 90);
@@ -61,7 +73,6 @@ async function updateStreak(internId) {
     }
   }
 
-  const intern = await Intern.findById(internId).select("longestStreak");
   const longest = Math.max(intern?.longestStreak || 0, streak);
 
   await Intern.findByIdAndUpdate(internId, {
@@ -78,9 +89,13 @@ async function resetStaleStreaks() {
   const yesterday = prevWorkingDay(now);
   yesterday.setHours(23, 59, 59, 999);
 
+  // Замороженным/архивным streak не сбрасываем: после разморозки они смогут
+  // продолжить с того места, где остановились (текущий streak важно сохранить
+  // как достижение, даже если активно прогрессировать его сейчас нельзя).
   const result = await Intern.updateMany(
     {
       currentStreak: { $gt: 0 },
+      status: "active",
       $or: [
         { lastLessonDate: { $lt: yesterday } },
         { lastLessonDate: null },

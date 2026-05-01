@@ -48,15 +48,20 @@ class CronService {
 
     async notifyMentorsWithDebt() {
         try {
-            // Находим менторов, у которых есть неоценённые уроки (статус pending)
-            const pendingLessons = await Lesson.find({ status: "pending" }).distinct("mentor");
+            const activeInternIds = await Intern.find({ status: "active" }).distinct("_id");
+            // Находим менторов, у которых есть неоценённые уроки активных стажёров.
+            const pendingLessons = await Lesson.find({
+                status: "pending",
+                intern: { $in: activeInternIds },
+            }).distinct("mentor");
 
             console.log(`📊 Found ${pendingLessons.length} mentors with pending lessons`);
 
             for (const mentorId of pendingLessons) {
                 const debtCount = await Lesson.countDocuments({
                     mentor: mentorId,
-                    status: "pending"
+                    status: "pending",
+                    intern: { $in: activeInternIds },
                 });
 
                 if (debtCount === 0) continue;
@@ -119,10 +124,18 @@ class CronService {
                 date: { $gte: cutoff },
             }).distinct("intern");
 
+            // Замороженных и архивных не пинаем напоминаниями — их статус
+            // явно говорит «не работает сейчас».
+            const inactiveInternIds = await Intern.find({
+                status: { $in: ["frozen", "archived"] },
+            }).distinct("_id");
+
             // Все интерны с push-подписками, кроме активных
             const subscriptions = await Subscription.find({
                 userType: { $in: ["intern", "Intern"] },
-                userId: { $nin: activeInternIds },
+                userId: {
+                    $nin: [...activeInternIds, ...inactiveInternIds],
+                },
             });
 
             if (subscriptions.length === 0) {

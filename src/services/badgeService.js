@@ -31,6 +31,7 @@ async function getInternStats(internId) {
 async function checkAndAwardBadges(internId) {
   const intern = await Intern.findById(internId);
   if (!intern) return { newBadges: [] };
+  if (intern.status !== "active") return { newBadges: [] };
 
   const stats = await getInternStats(internId);
   const existingKeys = new Set((intern.badges || []).map((b) => b.key));

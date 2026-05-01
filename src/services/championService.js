@@ -13,11 +13,17 @@ async function selectWeeklyChampion() {
   weekEnd.setDate(weekStart.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
 
+  // Чемпион выбирается среди активных интернов: архивные и замороженные
+  // не должны попадать в недельный топ, даже если у них накопилось много
+  // confirmed уроков до изменения статуса.
+  const activeIds = await Intern.find({ status: "active" }).distinct("_id");
+
   const results = await Lesson.aggregate([
     {
       $match: {
         date: { $gte: weekStart, $lte: weekEnd },
         status: "confirmed",
+        intern: { $in: activeIds },
       },
     },
     { $group: { _id: "$intern", count: { $sum: 1 } } },

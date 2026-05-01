@@ -24,8 +24,9 @@ function xpForNextLevel(level) {
 async function awardXP(internId, amount, reason) {
   if (!amount || amount <= 0) return;
 
-  const intern = await Intern.findById(internId).select("xp level");
+  const intern = await Intern.findById(internId).select("xp level status");
   if (!intern) return;
+  if (intern.status !== "active") return;
 
   intern.xp = (intern.xp || 0) + amount;
   intern.level = calculateLevel(intern.xp);

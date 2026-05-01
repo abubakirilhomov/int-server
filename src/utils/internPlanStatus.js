@@ -56,6 +56,43 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     };
   }
 
+  // Архивные и замороженные не блокируются по плану в принципе.
+  if (intern.status === "archived") {
+    return {
+      isPlanBlocked: false,
+      reason: "Аккаунт архивирован.",
+      weeklyTarget: 0,
+      completedWeeksInMonth: 0,
+      requiredLessonsByNow: 0,
+      confirmedLessonsThisMonth: 0,
+      deficit: 0,
+      isArchived: true,
+    };
+  }
+
+  if (intern.status === "frozen") {
+    const expectedReturn = intern.freezeInfo?.expectedReturn
+      ? new Intl.DateTimeFormat("ru-RU", {
+          timeZone: "Asia/Tashkent",
+          dateStyle: "short",
+        }).format(intern.freezeInfo.expectedReturn)
+      : null;
+    return {
+      isPlanBlocked: false,
+      reason: expectedReturn
+        ? `Аккаунт заморожен. Возвращение: ${expectedReturn}.`
+        : "Аккаунт заморожен.",
+      weeklyTarget: getWeeklyTarget(intern.lessonsPerMonth),
+      completedWeeksInMonth: getCompletedWeeksInMonth(referenceDate),
+      requiredLessonsByNow: 0,
+      confirmedLessonsThisMonth: 0,
+      deficit: 0,
+      isFrozen: true,
+      freezeStartedAt: intern.freezeInfo?.startedAt || null,
+      freezeExpectedReturn: intern.freezeInfo?.expectedReturn || null,
+    };
+  }
+
   if (intern.manualActivation?.isEnabled) {
     const enabledAt = intern.manualActivation.enabledAt;
     const stillValid =

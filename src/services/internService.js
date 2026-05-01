@@ -142,10 +142,12 @@ class InternService {
             const activityRate = Math.min(feedbackCount / Math.max(visitedCount, 1), 1);
             const attendanceFactor = Math.log(lessonCount + 1) / Math.log(30 + 1);
 
-            const planCompletion = Math.min(
-                lessonCount / (intern.lessonsPerMonth || 24),
-                1
-            );
+            // Сравниваем с целью за весь пробационный период (lessonsPerMonth × trialPeriod),
+            // а не за один месяц — иначе любой интерн с 24+ уроками мгновенно получает 100%.
+            const gradeConfig = grades[intern.grade];
+            const trialPeriod = gradeConfig?.trialPeriod || 1;
+            const trialTarget = (intern.lessonsPerMonth || 24) * trialPeriod;
+            const planCompletion = Math.min(lessonCount / trialTarget, 1);
 
             const ratingScore =
                 averageStars * 0.5 +
@@ -1049,7 +1051,6 @@ class InternService {
             .populate("branches.mentor", "name lastName");
 
         const now = new Date();
-        const currentMonth = now.getMonth() + 1; // Yanvar = 1
 
         // grade mapping
         const gradeMap = {
@@ -1087,8 +1088,12 @@ class InternService {
                 };
             }
 
-            // Hozirgi oyning normasi
-            const maxLessons = gradeConfig.lessonsPerMonth * currentMonth;
+            // Норма = уроки за прошедшее время с probationStartDate,
+            // но не более полного пробационного срока (trialPeriod месяцев).
+            const probationStart = intern.probationStartDate || intern.createdAt;
+            const monthsInSystem = (now - new Date(probationStart)) / (1000 * 60 * 60 * 24 * 30);
+            const effectiveMonths = Math.max(Math.min(monthsInSystem, gradeConfig.trialPeriod || 1), 0.25);
+            const maxLessons = gradeConfig.lessonsPerMonth * effectiveMonths;
 
             const attendance = maxLessons > 0 ? totalLessons / maxLessons : 0;
 
@@ -1106,8 +1111,8 @@ class InternService {
                 score: intern.score,
                 attendance: (attendance * 100).toFixed(1) + "%",
                 rating: rating.toFixed(2),
-                lessonsPerMonth: gradeConfig.lessonsPerMonth, // 1 oy uchun norma
-                totalLessonsRequired: maxLessons, // hozirgi oyning oxirigacha bo‘lishi kerak bo‘lgan jami darslar
+                lessonsPerMonth: gradeConfig.lessonsPerMonth,
+                totalLessonsRequired: Math.round(maxLessons),
                 totalLessonsVisited: totalLessons,
             };
         });

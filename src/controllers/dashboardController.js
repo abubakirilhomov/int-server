@@ -64,8 +64,8 @@ exports.getDashboardStats = async (req, res) => {
                 {
                     $group: {
                         _id: {
-                            year: { $year: "$createdAt" },
-                            month: { $month: "$createdAt" }
+                            year: { $year: "$date" },
+                            month: { $month: "$date" }
                         },
                         count: { $sum: 1 }
                     }
@@ -128,14 +128,15 @@ exports.getDashboardStats = async (req, res) => {
         const trialPeriodDays = gradeConfig.trialPeriod * 30;
         const daysRemaining = Math.max(trialPeriodDays - daysWorking, 0);
 
-        // Adjusted Monthly Goal (Kept for compatibility)
+        // Monthly goal for the plan-blocking widget (stays per-month).
         const monthlyGoal = gradeConfig.lessonsPerMonth;
-        const daysInMonth = Math.min(daysWorking, 30);
-        const adjustedMonthlyGoal = Math.ceil((daysInMonth / 30) * gradeConfig.lessonsPerMonth);
+
+        // Trial-based goal = full probation target (used for progress % and concession check).
+        const adjustedMonthlyGoal = trialTotalGoal;
 
         // --- Notification Flags ---
-        const percentage = adjustedMonthlyGoal > 0
-            ? Math.round((lessonsConfirmed / adjustedMonthlyGoal) * 100)
+        const percentage = trialTotalGoal > 0
+            ? Math.round((trialLessonsConfirmed / trialTotalGoal) * 100)
             : 0;
 
         // --- Average Score ---
@@ -215,7 +216,7 @@ exports.getDashboardStats = async (req, res) => {
             });
 
         // --- Overall Progress for Compatibility ---
-        const lessonsProgress = adjustedMonthlyGoal > 0 ? Math.min((lessonsConfirmed / adjustedMonthlyGoal) * 100, 100) : 0;
+        const lessonsProgress = trialTotalGoal > 0 ? Math.min((trialLessonsConfirmed / trialTotalGoal) * 100, 100) : 0;
         const scoreProgress = averageScore > 0 ? Math.min((averageScore / MAX_SCORE) * 100, 100) : 0;
         const overallProgress = Math.round((lessonsProgress + scoreProgress) / 2);
 
@@ -243,13 +244,13 @@ exports.getDashboardStats = async (req, res) => {
             nearDeadline: daysRemaining <= 7 && daysRemaining > 0,
             canGetConcession: percentage >= 50 && percentage <= 60 && daysRemaining <= 7,
 
-            // trialStats — прогресс испытательного срока.
-            // Используем lessonsConfirmed (уроки текущего месяца), а не уроки с даты повышения,
-            // потому что цель `lessonsPerMonth` измеряется помесячно.
+            // trialStats — прогресс испытательного срока от probationStartDate.
+            // totalLessons = confirmed + bonus с даты повышения/вступления.
+            // targetLessons = lessonsPerMonth × trialPeriod (полная цель за срок).
             trialStats: {
-                totalLessons: lessonsConfirmed,
-                targetLessons: monthlyGoal,
-                progressPercentage: monthlyGoal > 0 ? Math.round((lessonsConfirmed / monthlyGoal) * 100) : 0
+                totalLessons: trialLessonsConfirmed,
+                targetLessons: trialTotalGoal,
+                progressPercentage: percentage,
             },
             history: monthlyHistory,
             recentLessons: recentLessonsData,

@@ -116,8 +116,8 @@ class InternService {
     }
 
     async getRatings() {
-        // Архивные и замороженные исключены: рейтинг показывает только активных.
-        const interns = await Intern.find({ status: "active" })
+        // Archived and frozen excluded. Interns with missing status (e.g. imported during DB recovery) are treated as active.
+        const interns = await Intern.find({ status: { $nin: ["frozen", "archived"] } })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name");
 
@@ -1044,9 +1044,8 @@ class InternService {
     }
 
     async getInternsRating() {
-        // Рейтинг — только активные. Замороженные не имеют активной нормы,
-        // архивные — скрыты полностью.
-        const interns = await Intern.find({ status: "active" })
+        // Archived and frozen excluded. Interns with missing status (DB recovery) treated as active.
+        const interns = await Intern.find({ status: { $nin: ["frozen", "archived"] } })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
 

@@ -19,6 +19,7 @@ router.post("/refresh-token", internCtrl.refreshToken);
 router.patch("/me/profile", auth, internCtrl.updateOwnProfile);
 router.patch("/me/password", auth, internCtrl.changePassword);
 router.get("/me/badges", auth, internCtrl.getMyBadges);
+router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);

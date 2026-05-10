@@ -213,6 +213,7 @@ class InternService {
         // 🔹 Если админ и указан ID → можно смотреть чужой профиль
         if (user?.role === "admin" && id) {
             intern = await Intern.findById(id)
+                .select("-password")
                 .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
         } else {
@@ -222,11 +223,18 @@ class InternService {
             }
 
             intern = await Intern.findById(internId)
+                .select("-password")
                 .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
         }
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        // 🔹 PII сокрытие: phoneNumber/telegram видят только сам интерн и админ
+        const requesterId = String(user?._id || user?.id || "");
+        const isSelf = requesterId && requesterId === String(intern._id);
+        const isAdmin = user?.role === "admin";
+        const canSeePII = isSelf || isAdmin;
 
         // 🔹 Инфо о грейде
         const gradeConfig = grades[intern.grade] || null;
@@ -263,8 +271,8 @@ class InternService {
             name: intern.name,
             lastName: intern.lastName,
             username: intern.username,
-            phoneNumber: intern.phoneNumber || "",
-            telegram: intern.telegram || "",
+            phoneNumber: canSeePII ? (intern.phoneNumber || "") : "",
+            telegram: canSeePII ? (intern.telegram || "") : "",
             sphere: intern.sphere || "",
             profilePhoto: intern.profilePhoto || "",
             avatar: intern.profilePhoto || "",
@@ -315,8 +323,17 @@ class InternService {
         // для них есть отдельный эндпоинт /interns/archived.
         const baseFilter = { status: { $ne: "archived" } };
 
-        if (user?.role === "admin") {
+        // PII / sensitive fields: hidden from peer-intern responses;
+        // admin and mentors get full data (mentors need phone/telegram for outreach).
+        const isAdmin = user?.role === "admin";
+        const isMentor = user?.role === "mentor" || user?.role === "branchManager";
+        const peerProjection = "-password -phoneNumber -telegram -violations -feedbacks -complaints";
+        const adminMentorProjection = "-password";
+        const projection = isAdmin || isMentor ? adminMentorProjection : peerProjection;
+
+        if (isAdmin) {
             const interns = await Intern.find(baseFilter)
+                .select(projection)
                 .populate("branches.branch", "name telegramLink")
                 .populate("branches.mentor", "name lastName");
             return applyPlanStatus(interns);
@@ -328,6 +345,7 @@ class InternService {
         }
 
         const interns = await Intern.find({ ...baseFilter, "branches.branch": branchId })
+            .select(projection)
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
         return applyPlanStatus(interns);

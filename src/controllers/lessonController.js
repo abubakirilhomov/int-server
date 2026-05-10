@@ -159,6 +159,17 @@ exports.getLessonById = async (req, res) => {
 
     if (!lesson) return res.status(404).json({ message: "Lesson not found" });
 
+    const requesterId = String(req.user.id || req.user._id);
+    const isOwnerIntern =
+      lesson.intern && String(lesson.intern._id || lesson.intern) === requesterId;
+    const isAssignedMentor =
+      lesson.mentor && String(lesson.mentor._id || lesson.mentor) === requesterId;
+    const isAdmin = req.user.role === "admin";
+
+    if (!isOwnerIntern && !isAssignedMentor && !isAdmin) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     res.json(lesson);
   } catch (err) {
     res.status(500).json({ message: err.message });

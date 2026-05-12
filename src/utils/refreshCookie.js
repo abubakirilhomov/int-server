@@ -13,9 +13,13 @@ const buildOptions = (path) => ({
   maxAge: REFRESH_MAX_AGE_MS,
 });
 
+// Path must cover both /refresh-token and /logout so logout can read the
+// cookie to blacklist its jti. Scoping to /api/interns (or /api/mentors)
+// adds the cookie to all calls under that prefix — that's ~400B overhead
+// per request, acceptable given the security benefit.
 const pathFor = (name) => {
-  if (name === "refresh_intern") return "/api/interns/refresh-token";
-  if (name === "refresh_mentor") return "/api/mentors/refresh-token";
+  if (name === "refresh_intern") return "/api/interns";
+  if (name === "refresh_mentor") return "/api/mentors";
   throw new Error(`Unknown refresh cookie name: ${name}`);
 };
 

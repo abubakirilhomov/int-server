@@ -54,10 +54,10 @@ const uploadImage = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Upload error:", error);
     return res.status(500).json({
       success: false,
       message: "Ошибка загрузки файла",
-      error: error.message,
     });
   }
 };

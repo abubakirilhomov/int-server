@@ -1,9 +1,9 @@
 const Intern = require("../models/internModel");
 const Lesson = require("../models/lessonModel");
 const Mentor = require("../models/mentorModel");
+const catchAsync = require("../utils/catchAsync");
 
-exports.getAnalytics = async (req, res) => {
-  try {
+exports.getAnalytics = catchAsync(async (req, res) => {
     const now = new Date();
 
     // ── 1. Grade distribution ──
@@ -118,7 +118,4 @@ exports.getAnalytics = async (req, res) => {
         confirmedThisMonth,
       },
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+});

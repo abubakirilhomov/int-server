@@ -12,8 +12,7 @@ const internService = require("../services/internService");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getAllBadgeStatuses } = require("../services/badgeService");
 
-exports.loginIntern = async (req, res) => {
-  try {
+exports.loginIntern = catchAsync(async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
       return res
@@ -91,11 +90,7 @@ exports.loginIntern = async (req, res) => {
         } : null,
       },
     });
-  } catch (error) {
-    console.error("Ошибка при входе:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
+});
 
 exports.refreshToken = async (req, res) => {
   try {
@@ -140,9 +135,7 @@ exports.createIntern = catchAsync(async (req, res, next) => {
   res.status(201).json(intern);
 });
 
-exports.getPendingInterns = async (req, res) => {
-  try {
-    // Check role from req.user (set by auth middleware)
+exports.getPendingInterns = catchAsync(async (req, res) => {
     if (!["mentor", "branchManager"].includes(req.user?.role)) {
       return res.status(403).json({ error: "Доступ только для менторов и branch manager" });
     }
@@ -201,11 +194,7 @@ exports.getPendingInterns = async (req, res) => {
     });
 
     res.json(flattenedInterns);
-  } catch (error) {
-    console.error("Error in getPendingInterns:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
+});
 
 // Получение профиля стажёра
 exports.getInternProfile = catchAsync(async (req, res) => {

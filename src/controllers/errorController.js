@@ -1,5 +1,26 @@
 const AppError = require("../utils/AppError");
 
+const handleCastErrorDB = (err) => {
+    const message = `Некорректное значение поля ${err.path}`;
+    return new AppError(message, 400);
+};
+
+const handleValidationErrorDB = (err) => {
+    const fields = Object.keys(err.errors || {}).join(", ");
+    const message = fields
+        ? `Ошибка валидации: ${fields}`
+        : "Ошибка валидации данных";
+    return new AppError(message, 400);
+};
+
+const handleDuplicateKeyDB = (err) => {
+    const field = err.keyValue ? Object.keys(err.keyValue)[0] : "поле";
+    return new AppError(`Дубликат значения: ${field} уже существует`, 409);
+};
+
+const handleJwtError = () => new AppError("Недействительный токен", 401);
+const handleJwtExpired = () => new AppError("Срок действия токена истёк", 401);
+
 const sendErrorDev = (err, res) => {
     res.status(err.statusCode).json({
         status: err.status,
@@ -10,22 +31,16 @@ const sendErrorDev = (err, res) => {
 };
 
 const sendErrorProd = (err, res) => {
-    // Operational, trusted error: send message to client
     if (err.isOperational) {
         res.status(err.statusCode).json({
             status: err.status,
             message: err.message,
         });
-
-        // Programming or other unknown error: don't leak details
     } else {
-        // 1) Log error
         console.error("ERROR 💥", err);
-
-        // 2) Send generic message
         res.status(500).json({
             status: "error",
-            message: "Something went very wrong!",
+            message: "Что-то пошло не так",
         });
     }
 };
@@ -36,12 +51,16 @@ module.exports = (err, req, res, next) => {
 
     if (process.env.NODE_ENV === "development") {
         sendErrorDev(err, res);
-    } else {
-        let error = { ...err };
-        error.message = err.message;
-
-        // Handle specific Mongoose errors here if needed (e.g. CastError, ValidationError)
-
-        sendErrorProd(error, res);
+        return;
     }
+
+    let error = err;
+
+    if (err.name === "CastError") error = handleCastErrorDB(err);
+    else if (err.name === "ValidationError") error = handleValidationErrorDB(err);
+    else if (err.code === 11000) error = handleDuplicateKeyDB(err);
+    else if (err.name === "JsonWebTokenError") error = handleJwtError();
+    else if (err.name === "TokenExpiredError") error = handleJwtExpired();
+
+    sendErrorProd(error, res);
 };

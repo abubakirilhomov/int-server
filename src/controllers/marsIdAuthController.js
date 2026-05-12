@@ -35,12 +35,13 @@ const issueInternalSession = async (user, kind) => {
         branchId: user.branches?.[0] || null,
         name: user.name,
         lastName: user.lastName || "",
+        jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
     const refreshToken = jwt.sign(
-      { id: user._id },
+      { id: user._id, jti: crypto.randomUUID() },
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
@@ -67,12 +68,13 @@ const issueInternalSession = async (user, kind) => {
       branchIds,
       branchId: branchIds[0] || null,
       isHeadIntern: (user.branches || []).some((b) => b.isHeadIntern),
+      jti: crypto.randomUUID(),
     },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
   const refreshToken = jwt.sign(
-    { id: user._id },
+    { id: user._id, jti: crypto.randomUUID() },
     process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );

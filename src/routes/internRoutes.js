@@ -16,6 +16,7 @@ router.get('/archived', auth, isAdmin, internCtrl.getArchivedInterns);
 router.post('/', auth, isAdmin, validateRequest(createInternSchema), internCtrl.createIntern);
 router.post('/login', internCtrl.loginIntern);
 router.post("/refresh-token", internCtrl.refreshToken);
+router.post("/logout", auth, internCtrl.logoutIntern);
 router.patch("/me/profile", auth, internCtrl.updateOwnProfile);
 router.patch("/me/password", auth, internCtrl.changePassword);
 router.get("/me/badges", auth, internCtrl.getMyBadges);

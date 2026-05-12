@@ -4,7 +4,9 @@ const Mentor = require("../models/mentorModel");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const Lesson = require("../models/lessonModel");
+const RevokedToken = require("../models/revokedTokenModel");
 const grades = require("../config/grades");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
@@ -49,12 +51,13 @@ exports.loginIntern = catchAsync(async (req, res) => {
         branchIds,
         branchId: branchIds[0] || null,
         isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
+        jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
     const refreshToken = jwt.sign(
-      { id: intern._id },
+      { id: intern._id, jti: crypto.randomUUID() },
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
@@ -117,6 +120,7 @@ exports.refreshToken = async (req, res) => {
         branchIds: intern.branches.map((b) => b.branch),
         branchId: intern.branches[0]?.branch || null,
         isHeadIntern: intern.branches.some((b) => b.isHeadIntern),
+        jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
@@ -127,6 +131,44 @@ exports.refreshToken = async (req, res) => {
     res.status(401).json({ error: "Invalid refresh token" });
   }
 };
+
+exports.logoutIntern = catchAsync(async (req, res) => {
+  const { jti, exp, id } = req.user;
+  if (jti && exp) {
+    await RevokedToken.create({
+      jti,
+      exp: new Date(exp * 1000),
+      userId: String(id),
+      userType: "intern",
+    }).catch((err) => {
+      if (err.code !== 11000) throw err;
+    });
+  }
+
+  const refreshToken = req.body?.refreshToken;
+  if (refreshToken) {
+    try {
+      const decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
+      );
+      if (decoded.jti && decoded.exp) {
+        await RevokedToken.create({
+          jti: decoded.jti,
+          exp: new Date(decoded.exp * 1000),
+          userId: String(decoded.id || id),
+          userType: "intern",
+        }).catch((err) => {
+          if (err.code !== 11000) throw err;
+        });
+      }
+    } catch {
+      // Refresh token уже невалиден — ничего не делаем, logout всё равно успешен
+    }
+  }
+
+  res.json({ message: "Вы вышли из системы" });
+});
 
 // Создание стажёра
 // Создание стажёра

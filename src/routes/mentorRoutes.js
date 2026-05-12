@@ -11,6 +11,7 @@ router.delete('/:id', authMiddleware, isAdmin, mentorController.deleteMentor);
 router.post('/:id/reset-password', authMiddleware, isAdmin, mentorController.resetPassword);
 router.post('/login', mentorController.loginMentor);
 router.post("/refresh-token", mentorController.refreshMentorToken);
+router.post("/logout", authMiddleware, mentorController.logoutMentor);
 router.patch("/me/password", authMiddleware, mentorController.changePassword);
 
 router.get("/:id/stats", authMiddleware, mentorController.getMentorStats);

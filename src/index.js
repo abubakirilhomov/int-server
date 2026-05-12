@@ -30,6 +30,7 @@ if (envError) {
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 const cronService = require("./services/cronService");
 
@@ -71,10 +72,11 @@ const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
 
-app.use(cors({ origin: allowedOrigins }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
+app.use(cookieParser());
 
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────

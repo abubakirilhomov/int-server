@@ -7,6 +7,7 @@ const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const { setRefreshCookie, clearRefreshCookie } = require("../utils/refreshCookie");
 
 exports.createMentor = catchAsync(async (req, res) => {
   const { name, lastName, password, branch, branches, role, profilePhoto } = req.body;
@@ -154,13 +155,14 @@ exports.loginMentor = catchAsync(async (req, res) => {
       jti: crypto.randomUUID(),
     },
     process.env.JWT_SECRET,
-    { expiresIn: "1d" }
+    { expiresIn: "15m" }
   );
   const refreshToken = jwt.sign(
     { id: mentor._id, jti: crypto.randomUUID() },
     process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );
+  setRefreshCookie(res, "refresh_mentor", refreshToken);
 
   res.json({
     token,
@@ -178,11 +180,18 @@ exports.loginMentor = catchAsync(async (req, res) => {
 });
 
 exports.refreshMentorToken = catchAsync(async (req, res) => {
-  const { refreshToken } = req.body;
+  // Cookie first, body fallback for migration window.
+  const refreshToken = req.cookies?.refresh_mentor || req.body?.refreshToken;
   if (!refreshToken) throw new AppError("Refresh token required", 401);
 
   try {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+
+    if (decoded.jti) {
+      const revoked = await RevokedToken.exists({ jti: decoded.jti });
+      if (revoked) throw new AppError("Refresh token revoked", 401);
+    }
+
     const mentor = await Mentor.findById(decoded.id || decoded._id);
     if (!mentor) throw new AppError("Mentor not found", 404);
 
@@ -197,11 +206,20 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
         jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "15m" }
     );
+
+    // Rotate refresh cookie.
+    const newRefresh = jwt.sign(
+      { id: mentor._id, jti: crypto.randomUUID() },
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+    setRefreshCookie(res, "refresh_mentor", newRefresh);
 
     res.json({ token: newToken });
   } catch (err) {
+    if (err instanceof AppError) throw err;
     throw new AppError("Invalid refresh token", 401);
   }
 });
@@ -219,7 +237,7 @@ exports.logoutMentor = catchAsync(async (req, res) => {
     });
   }
 
-  const refreshToken = req.body?.refreshToken;
+  const refreshToken = req.cookies?.refresh_mentor || req.body?.refreshToken;
   if (refreshToken) {
     try {
       const decoded = jwt.verify(
@@ -241,6 +259,7 @@ exports.logoutMentor = catchAsync(async (req, res) => {
     }
   }
 
+  clearRefreshCookie(res, "refresh_mentor");
   res.json({ message: "Вы вышли из системы" });
 });
 

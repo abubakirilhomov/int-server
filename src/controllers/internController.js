@@ -13,6 +13,7 @@ const AppError = require("../utils/AppError");
 const internService = require("../services/internService");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getAllBadgeStatuses } = require("../services/badgeService");
+const { setRefreshCookie, clearRefreshCookie } = require("../utils/refreshCookie");
 
 exports.loginIntern = catchAsync(async (req, res) => {
     const { username, password } = req.body;
@@ -54,13 +55,14 @@ exports.loginIntern = catchAsync(async (req, res) => {
         jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "15m" }
     );
     const refreshToken = jwt.sign(
       { id: intern._id, jti: crypto.randomUUID() },
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
+    setRefreshCookie(res, "refresh_intern", refreshToken);
     const planStatus = await getInternPlanStatus(intern);
 
     res.status(200).json({
@@ -97,7 +99,9 @@ exports.loginIntern = catchAsync(async (req, res) => {
 
 exports.refreshToken = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    // Cookie first, body fallback for migration window from clients that
+    // still send refreshToken in the request body.
+    const refreshToken = req.cookies?.refresh_intern || req.body?.refreshToken;
     if (!refreshToken)
       return res.status(401).json({ error: "Refresh token required" });
 
@@ -105,6 +109,13 @@ exports.refreshToken = async (req, res) => {
       refreshToken,
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
     );
+
+    if (decoded.jti) {
+      const revoked = await RevokedToken.exists({ jti: decoded.jti });
+      if (revoked) {
+        return res.status(401).json({ error: "Refresh token revoked" });
+      }
+    }
 
     const intern = await Intern.findById(decoded.id);
     if (!intern) return res.status(404).json({ error: "Intern not found" });
@@ -123,8 +134,16 @@ exports.refreshToken = async (req, res) => {
         jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "15m" }
     );
+
+    // Rotate the refresh cookie so each refresh issues a fresh jti.
+    const newRefresh = jwt.sign(
+      { id: intern._id, jti: crypto.randomUUID() },
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+    setRefreshCookie(res, "refresh_intern", newRefresh);
 
     res.json({ token: newToken });
   } catch (err) {
@@ -145,7 +164,7 @@ exports.logoutIntern = catchAsync(async (req, res) => {
     });
   }
 
-  const refreshToken = req.body?.refreshToken;
+  const refreshToken = req.cookies?.refresh_intern || req.body?.refreshToken;
   if (refreshToken) {
     try {
       const decoded = jwt.verify(
@@ -167,6 +186,7 @@ exports.logoutIntern = catchAsync(async (req, res) => {
     }
   }
 
+  clearRefreshCookie(res, "refresh_intern");
   res.json({ message: "Вы вышли из системы" });
 });
 

@@ -6,6 +6,7 @@ const Intern = require("../models/internModel");
 const marsIdService = require("../services/marsIdService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
+const { setRefreshCookie } = require("../utils/refreshCookie");
 
 const APP_KEYS = ["mentors", "interns", "admin"];
 const STATE_TTL_SEC = 10 * 60;
@@ -38,7 +39,7 @@ const issueInternalSession = async (user, kind) => {
         jti: crypto.randomUUID(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "15m" }
     );
     const refreshToken = jwt.sign(
       { id: user._id, jti: crypto.randomUUID() },
@@ -71,7 +72,7 @@ const issueInternalSession = async (user, kind) => {
       jti: crypto.randomUUID(),
     },
     process.env.JWT_SECRET,
-    { expiresIn: "1d" }
+    { expiresIn: "15m" }
   );
   const refreshToken = jwt.sign(
     { id: user._id, jti: crypto.randomUUID() },
@@ -190,10 +191,14 @@ exports.callback = catchAsync(async (req, res) => {
     await existing.save();
 
     const session = await issueInternalSession(existing, kind);
+    setRefreshCookie(
+      res,
+      kind === "mentor" ? "refresh_mentor" : "refresh_intern",
+      session.refreshToken
+    );
     return res.redirect(
       buildFragmentRedirect(returnUrl, {
         token: session.token,
-        refreshToken: session.refreshToken,
         user: JSON.stringify(session.user),
       })
     );
@@ -292,6 +297,11 @@ exports.link = catchAsync(async (req, res) => {
   await user.save();
 
   const session = await issueInternalSession(user, kind);
+  setRefreshCookie(
+    res,
+    kind === "mentor" ? "refresh_mentor" : "refresh_intern",
+    session.refreshToken
+  );
   res.json(session);
 });
 

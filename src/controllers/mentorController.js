@@ -128,8 +128,12 @@ exports.loginMentor = catchAsync(async (req, res) => {
     lastName: String(lastName).trim(),
   };
 
-  // 1. Находим всех менторов с таким именем (explicitly select password)
-  const mentors = await Mentor.find(query).select('+password');
+  // 1. Находим всех менторов с таким именем (explicitly select password,
+  //    populate branches so the response can carry names for the runtime
+  //    branch switcher in the UI).
+  const mentors = await Mentor.find(query)
+    .select('+password')
+    .populate('branches', 'name');
 
   if (!mentors || mentors.length === 0) {
     throw new AppError("Invalid credentials", 401);
@@ -150,13 +154,18 @@ exports.loginMentor = catchAsync(async (req, res) => {
     throw new AppError("Invalid credentials", 401);
   }
 
+  // branches is now populated → split into raw IDs (for JWT + back-compat
+  // branchIds) and {_id, name} objects (for the switcher).
+  const branchObjs = (mentor.branches || []).map((b) => ({ _id: b._id, name: b.name }));
+  const branchIds = branchObjs.map((b) => b._id);
+
   // Generate tokens
   const token = jwt.sign(
     {
       id: mentor._id,
       role: mentor.role,
-      branchIds: mentor.branches || [],
-      branchId: mentor.branches?.[0] || null,
+      branchIds,
+      branchId: branchIds[0] || null,
       name: mentor.name,
       lastName: mentor.lastName || "",
       jti: crypto.randomUUID(),
@@ -179,8 +188,9 @@ exports.loginMentor = catchAsync(async (req, res) => {
       name: mentor.name,
       lastName: mentor.lastName,
       role: mentor.role,
-      branchIds: mentor.branches || [],
-      branchId: mentor.branches?.[0] || null,
+      branchIds,
+      branchId: branchIds[0] || null,
+      branches: branchObjs,
       profilePhoto: mentor.profilePhoto || "",
     }
   });
@@ -199,15 +209,19 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
       if (revoked) throw new AppError("Refresh token revoked", 401);
     }
 
-    const mentor = await Mentor.findById(decoded.id || decoded._id);
+    const mentor = await Mentor.findById(decoded.id || decoded._id)
+      .populate('branches', 'name');
     if (!mentor) throw new AppError("Mentor not found", 404);
+
+    const branchObjs = (mentor.branches || []).map((b) => ({ _id: b._id, name: b.name }));
+    const branchIds = branchObjs.map((b) => b._id);
 
     const newToken = jwt.sign(
       {
         id: mentor._id,
         role: mentor.role,
-        branchIds: mentor.branches || [],
-        branchId: mentor.branches?.[0] || null,
+        branchIds,
+        branchId: branchIds[0] || null,
         name: mentor.name,
         lastName: mentor.lastName || "",
         jti: crypto.randomUUID(),
@@ -224,7 +238,19 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
     );
     setRefreshCookie(res, "refresh_mentor", newRefresh);
 
-    res.json({ token: newToken });
+    res.json({
+      token: newToken,
+      user: {
+        _id: mentor._id,
+        name: mentor.name,
+        lastName: mentor.lastName,
+        role: mentor.role,
+        branchIds,
+        branchId: branchIds[0] || null,
+        branches: branchObjs,
+        profilePhoto: mentor.profilePhoto || "",
+      },
+    });
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new AppError("Invalid refresh token", 401);

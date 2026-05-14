@@ -28,12 +28,20 @@ const buildFragmentRedirect = (returnUrl, params) => {
 
 const issueInternalSession = async (user, kind) => {
   if (kind === "mentor") {
+    // Populate branches with names so the response can carry {_id, name}
+    // for the runtime branch switcher. Idempotent if already populated.
+    if (!user.populated("branches")) {
+      await user.populate("branches", "name");
+    }
+    const branchObjs = (user.branches || []).map((b) => ({ _id: b._id, name: b.name }));
+    const branchIds = branchObjs.map((b) => b._id);
+
     const token = jwt.sign(
       {
         id: user._id,
         role: user.role,
-        branchIds: user.branches || [],
-        branchId: user.branches?.[0] || null,
+        branchIds,
+        branchId: branchIds[0] || null,
         name: user.name,
         lastName: user.lastName || "",
         jti: crypto.randomUUID(),
@@ -54,14 +62,22 @@ const issueInternalSession = async (user, kind) => {
         name: user.name,
         lastName: user.lastName,
         role: user.role,
-        branchIds: user.branches || [],
-        branchId: user.branches?.[0] || null,
+        branchIds,
+        branchId: branchIds[0] || null,
+        branches: branchObjs,
         profilePhoto: user.profilePhoto || "",
       },
     };
   }
   // intern
-  const branchIds = (user.branches || []).map((b) => b.branch).filter(Boolean);
+  // Populate branches.branch with names so the response carries names for the
+  // runtime branch switcher. Idempotent if already populated.
+  if (!user.populated("branches.branch")) {
+    await user.populate("branches.branch", "name");
+  }
+  const branchIds = (user.branches || [])
+    .map((b) => (b.branch?._id ? b.branch._id : b.branch))
+    .filter(Boolean);
   const token = jwt.sign(
     {
       id: user._id,
@@ -90,6 +106,7 @@ const issueInternalSession = async (user, kind) => {
       role: "intern",
       branchIds,
       branchId: branchIds[0] || null,
+      branches: user.branches, // populated with branch.name for the switcher
       isHeadIntern: (user.branches || []).some((b) => b.isHeadIntern),
       profilePhoto: user.profilePhoto || "",
     },

@@ -207,6 +207,18 @@ const internSchema = new mongoose.Schema({
       enum: ["junior", "strongJunior", "middle", "strongMiddle", "senior"],
     },
   },
+  // Одноразовая анкета участника. Заполняется самим интерном через модалку
+  // в дашборде. submittedAt = null → анкета ещё не пройдена.
+  internshipSurvey: {
+    submittedAt: { type: Date, default: null },
+    marsStudyStartedAt: { type: Date },
+    becameInternAt: { type: Date },
+    studyStatus: {
+      type: String,
+      enum: ["currently_studying", "graduated"],
+    },
+    proCourseCompleted: { type: Boolean, default: null },
+  },
 });
 
 // Virtuals for backward compatibility

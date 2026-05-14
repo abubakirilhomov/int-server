@@ -6,6 +6,7 @@ const isAdmin = require('../middleware/isAdmin');
 const isHeadIntern = require('../middleware/isHeadIntern');
 const validateRequest = require('../middleware/validateRequest');
 const { createInternSchema } = require('../validations/internValidation');
+const { submitInternshipSurveySchema } = require('../validations/internshipSurveyValidation');
 
 router.get('/rating', auth, internCtrl.getInternsRating);
 router.get('/client-rating', auth, internCtrl.getRatings)
@@ -20,6 +21,13 @@ router.post("/logout", auth, internCtrl.logoutIntern);
 router.patch("/me/profile", auth, internCtrl.updateOwnProfile);
 router.patch("/me/password", auth, internCtrl.changePassword);
 router.get("/me/badges", auth, internCtrl.getMyBadges);
+router.post(
+  "/me/survey",
+  auth,
+  validateRequest(submitInternshipSurveySchema),
+  internCtrl.submitInternshipSurvey
+);
+router.get("/survey-stats", auth, isAdmin, internCtrl.getSurveyStats);
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
 router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);

@@ -65,6 +65,8 @@ exports.loginIntern = catchAsync(async (req, res) => {
     setRefreshCookie(res, "refresh_intern", refreshToken);
     const planStatus = await getInternPlanStatus(intern);
 
+    const surveyCompleted = Boolean(intern.internshipSurvey?.submittedAt);
+
     res.status(200).json({
       token,
       refreshToken,
@@ -93,6 +95,8 @@ exports.loginIntern = catchAsync(async (req, res) => {
           reason: intern.freezeInfo?.reason || null,
           note: intern.freezeInfo?.note || "",
         } : null,
+        surveyCompleted,
+        internshipSurvey: surveyCompleted ? intern.internshipSurvey : null,
       },
     });
 });
@@ -483,4 +487,95 @@ exports.changePassword = catchAsync(async (req, res) => {
 exports.getMyBadges = catchAsync(async (req, res) => {
   const badges = await getAllBadgeStatuses(req.user.id);
   res.json({ badges });
+});
+
+// One-time participant survey. Submitted by the intern from the dashboard
+// modal. Idempotent — second attempt is a 409. Body shape validated by
+// validations/internshipSurveyValidation.js (dates ordered, proCourse
+// required only when studyStatus = "graduated", forbidden otherwise).
+exports.submitInternshipSurvey = catchAsync(async (req, res, next) => {
+  if (req.user.role !== "intern") {
+    return next(new AppError("Доступ только для интернов", 403));
+  }
+
+  const intern = await Intern.findById(req.user.id);
+  if (!intern) return next(new AppError("Intern not found", 404));
+
+  if (intern.internshipSurvey?.submittedAt) {
+    return next(new AppError("Анкета уже отправлена", 409));
+  }
+
+  const {
+    marsStudyStartedAt,
+    becameInternAt,
+    studyStatus,
+    proCourseCompleted,
+  } = req.body;
+
+  intern.internshipSurvey = {
+    submittedAt: new Date(),
+    marsStudyStartedAt,
+    becameInternAt,
+    studyStatus,
+    // For currently_studying, schema forbids the field — store null.
+    proCourseCompleted:
+      studyStatus === "graduated" ? proCourseCompleted : null,
+  };
+  await intern.save();
+
+  res.json({
+    surveyCompleted: true,
+    internshipSurvey: intern.internshipSurvey,
+  });
+});
+
+// Admin-only aggregation for marketing. Returns counts split by status and
+// by Pro-course completion, plus average gap between Mars study start and
+// becoming an intern.
+exports.getSurveyStats = catchAsync(async (req, res) => {
+  const docs = await Intern.find({ "internshipSurvey.submittedAt": { $ne: null } })
+    .select("internshipSurvey name lastName username sphere status")
+    .lean();
+
+  const total = docs.length;
+  const byStatus = { currently_studying: 0, graduated: 0 };
+  const proCourse = { yes: 0, no: 0, unknown: 0 };
+  let gapDaysSum = 0;
+  let gapDaysCount = 0;
+
+  for (const d of docs) {
+    const s = d.internshipSurvey || {};
+    if (byStatus[s.studyStatus] !== undefined) byStatus[s.studyStatus] += 1;
+
+    if (s.studyStatus === "graduated") {
+      if (s.proCourseCompleted === true) proCourse.yes += 1;
+      else if (s.proCourseCompleted === false) proCourse.no += 1;
+      else proCourse.unknown += 1;
+    }
+
+    if (s.marsStudyStartedAt && s.becameInternAt) {
+      const gap = (new Date(s.becameInternAt) - new Date(s.marsStudyStartedAt)) / 86400000;
+      if (gap >= 0) {
+        gapDaysSum += gap;
+        gapDaysCount += 1;
+      }
+    }
+  }
+
+  res.json({
+    total,
+    byStatus,
+    proCourse, // only counts among graduated
+    averageStudyToInternDays:
+      gapDaysCount > 0 ? Math.round((gapDaysSum / gapDaysCount) * 10) / 10 : null,
+    submissions: docs.map((d) => ({
+      _id: d._id,
+      name: d.name,
+      lastName: d.lastName,
+      username: d.username,
+      sphere: d.sphere,
+      status: d.status,
+      internshipSurvey: d.internshipSurvey,
+    })),
+  });
 });

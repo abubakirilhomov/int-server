@@ -109,6 +109,10 @@ const issueInternalSession = async (user, kind) => {
       branches: user.branches, // populated with branch.name for the switcher
       isHeadIntern: (user.branches || []).some((b) => b.isHeadIntern),
       profilePhoto: user.profilePhoto || "",
+      surveyCompleted: Boolean(user.internshipSurvey?.submittedAt),
+      internshipSurvey: user.internshipSurvey?.submittedAt
+        ? user.internshipSurvey
+        : null,
     },
   };
 };

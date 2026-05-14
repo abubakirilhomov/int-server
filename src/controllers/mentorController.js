@@ -10,7 +10,7 @@ const crypto = require("crypto");
 const { setRefreshCookie, clearRefreshCookie } = require("../utils/refreshCookie");
 
 exports.createMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, branches, role, profilePhoto } = req.body;
+  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId } = req.body;
   if (!name || !password) {
     throw new AppError("Name and password are required", 400);
   }
@@ -32,6 +32,7 @@ exports.createMentor = catchAsync(async (req, res) => {
     branches: branchList,
     role: ["mentor", "admin", "branchManager"].includes(role) ? role : "mentor",
     profilePhoto: profilePhoto || "",
+    telegramChatId: typeof telegramChatId === "string" ? telegramChatId.trim() : "",
   });
 
   mentor.password = undefined; // Hide password in response
@@ -39,7 +40,8 @@ exports.createMentor = catchAsync(async (req, res) => {
 });
 
 exports.getMentors = catchAsync(async (req, res) => {
-  const mentors = await Mentor.find().populate("branches", "name");
+  const select = req.user?.role === "admin" ? "+telegramChatId" : "";
+  const mentors = await Mentor.find().select(select).populate("branches", "name");
   res.json(mentors);
 });
 
@@ -49,7 +51,7 @@ exports.deleteMentor = catchAsync(async (req, res) => {
 });
 
 exports.updateMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, branches, role, profilePhoto } = req.body;
+  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId } = req.body;
   const { id } = req.params;
 
   // Find the mentor (select password field for potential update)
@@ -69,6 +71,9 @@ exports.updateMentor = catchAsync(async (req, res) => {
   }
   if (role && ['mentor', 'admin', 'branchManager'].includes(role)) mentor.role = role;
   if (profilePhoto !== undefined) mentor.profilePhoto = profilePhoto;
+  if (telegramChatId !== undefined) {
+    mentor.telegramChatId = typeof telegramChatId === "string" ? telegramChatId.trim() : "";
+  }
 
   // Only update password if provided
   if (password && password.trim()) {
@@ -78,7 +83,9 @@ exports.updateMentor = catchAsync(async (req, res) => {
   await mentor.save();
 
   // Populate branches and hide password
-  const updatedMentor = await Mentor.findById(id).populate("branches", "name");
+  const updatedMentor = await Mentor.findById(id)
+    .select("+telegramChatId")
+    .populate("branches", "name");
 
   res.json(updatedMentor);
 });

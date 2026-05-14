@@ -18,6 +18,7 @@ const mentorSchema = new mongoose.Schema({
     email: { type: String, trim: true, lowercase: true },
     linkedAt: { type: Date },
   },
+  telegramChatId: { type: String, trim: true, default: "", select: false },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -19,6 +19,9 @@ const envSchema = Joi.object({
   MARS_ID_RETURN_URL_MENTORS:     Joi.string().uri().optional(),
   MARS_ID_RETURN_URL_INTERNS:     Joi.string().uri().optional(),
   MARS_ID_RETURN_URL_ADMIN:       Joi.string().uri().optional(),
+  // Telegram (used for application notifications). Optional — if absent,
+  // notifications log an error on the Application doc but submit still succeeds.
+  TELEGRAM_BOT_TOKEN:             Joi.string().optional(),
 }).unknown(true);
 
 const { error: envError } = envSchema.validate(process.env);
@@ -67,6 +70,7 @@ const defaultOrigins = [
   "https://mentors-mars.uz",
   "https://interns-admin.uz",
   "https://www.interns-admin.uz",
+  "https://internup-zeta.vercel.app",
 ];
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
@@ -118,6 +122,7 @@ app.use("/api/grade-config", require("./routes/gradeConfigRoutes"));
 app.use("/api/settings", require("./routes/settingsRoutes"));
 app.use("/api/lesson-criteria", require("./routes/lessonCriteriaRoutes"));
 app.use("/api/auth/marsid", require("./routes/marsIdAuthRoutes"));
+app.use("/api/applications", require("./routes/applicationRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

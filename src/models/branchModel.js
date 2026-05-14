@@ -9,6 +9,7 @@ const branchSchema = new mongoose.Schema({
     lng: { type: Number, min: -180, max: 180 },
   },
   telegramLink: { type: String },
+  branchManager: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentor', default: null },
   interviews: {}
 }, { timestamps: true });
 

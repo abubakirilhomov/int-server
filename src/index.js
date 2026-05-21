@@ -59,9 +59,6 @@ app.use(helmet());
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const defaultOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5175",
   "https://mentors-rho.vercel.app",
   "https://interns-lovat.vercel.app",
   "https://internship-admin-zeta.vercel.app",
@@ -71,12 +68,26 @@ const defaultOrigins = [
   "https://interns-admin.uz",
   "https://www.interns-admin.uz",
   "https://internup-zeta.vercel.app",
+  "https://internup-mars.uz",
+  "https://www.internup-mars.uz",
 ];
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+const localhostRe = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (localhostRe.test(origin)) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  })
+);
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));

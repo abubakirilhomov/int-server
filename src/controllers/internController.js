@@ -278,7 +278,7 @@ exports.getInterns = catchAsync(async (req, res) => {
   res.json(interns);
 });
 
-// Weekly plan view собственного аккаунта (Phase 1 shadow-mode).
+// Weekly plan view собственного аккаунта.
 // Возвращает status, streak, current week stats, activationsLeft, at_risk.
 // Фронт может poll'ить отдельно от дашборда для обновления индикатора.
 exports.getMyWeeklyPlan = catchAsync(async (req, res) => {
@@ -288,6 +288,21 @@ exports.getMyWeeklyPlan = catchAsync(async (req, res) => {
   if (!intern) return res.status(404).json({ message: "Стажёр не найден" });
   const view = await getWeeklyPlanView(intern);
   res.json(view);
+});
+
+// Phase 2: self-activate из restricted-статуса (2 раза в календарный месяц).
+exports.selfActivateWeeklyPlan = catchAsync(async (req, res) => {
+  if (req.user?.role !== "intern") {
+    throw new AppError("Только для интернов", 403);
+  }
+  const result = await internService.selfActivateWeeklyPlan(req.user.id);
+  res.json(result);
+});
+
+// Admin override — снимает любой блок (restricted | admin_block) → ok.
+exports.clearWeeklyPlanBlock = catchAsync(async (req, res) => {
+  const result = await internService.clearWeeklyPlanBlock(req.params.id);
+  res.json(result);
 });
 
 // Обновление стажёра

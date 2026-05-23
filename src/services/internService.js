@@ -1138,5 +1138,86 @@ class InternService {
 
         return withRating;
     }
+
+    // Self-activation: интерн сам снимает restricted-статус. Лимит 2 раза
+    // за календарный месяц (по timezone Asia/Tashkent — см.
+    // weeklyPlanService.startOfTashkentMonth). Если лимит исчерпан или
+    // статус уже admin_block — кидаем 403, фронт должен скрывать кнопку.
+    // На admin override см. clearWeeklyPlanBlock ниже.
+    async selfActivateWeeklyPlan(internId) {
+        const { _internals } = require("./weeklyPlanService");
+        const intern = await Intern.findById(internId);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        const wp = intern.weeklyPlan || {};
+        if (wp.status !== "restricted") {
+            throw new AppError(
+                `Самоактивация недоступна (текущий статус: ${wp.status || "ok"})`,
+                400
+            );
+        }
+
+        const monthStart = _internals.startOfTashkentMonth(new Date());
+        const used = (wp.selfActivations || []).filter((a) => {
+            const d = a.activatedAt ? new Date(a.activatedAt) : null;
+            return d && d >= monthStart;
+        }).length;
+
+        if (used >= 2) {
+            // Защита от прямого API-вызова — обычно UI скрывает кнопку.
+            // Эскалируем в admin_block чтобы состояние было консистентным.
+            wp.status = "admin_block";
+            intern.weeklyPlan = wp;
+            await intern.save();
+            throw new AppError(
+                "Лимит самоактиваций исчерпан (2/2). Обратись к менеджеру.",
+                403
+            );
+        }
+
+        wp.selfActivations = wp.selfActivations || [];
+        wp.selfActivations.push({
+            activatedAt: new Date(),
+            weekStartAt: wp.currentWeekStartAt || null,
+            deficitAtTime: Math.max(
+                0,
+                (wp.currentWeekTarget || 0) - (wp.currentWeekConfirmed || 0)
+            ),
+            targetAtTime: wp.currentWeekTarget || 0,
+            notes: "",
+        });
+        wp.status = "ok";
+        wp.restrictedSince = null;
+
+        intern.weeklyPlan = wp;
+        await intern.save();
+
+        return {
+            message: "Аккаунт реактивирован. Постарайся выполнить план до воскресенья.",
+            weeklyPlan: wp,
+            activationsLeft: Math.max(0, 2 - (used + 1)),
+        };
+    }
+
+    // Admin override — сбрасывает status в ok при любом текущем состоянии.
+    // По выбору пользователя (open-question #4) — selfActivations за месяц
+    // НЕ обнуляются: интерн продолжит копить счётчик до конца месяца.
+    // Streak тоже не восстанавливается (=0).
+    async clearWeeklyPlanBlock(internId) {
+        const intern = await Intern.findById(internId);
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        const wp = intern.weeklyPlan || {};
+        const prevStatus = wp.status || "ok";
+        wp.status = "ok";
+        wp.restrictedSince = null;
+        intern.weeklyPlan = wp;
+        await intern.save();
+
+        return {
+            message: `Блок снят (был: ${prevStatus} → ok)`,
+            weeklyPlan: wp,
+        };
+    }
 }
 module.exports = new InternService();

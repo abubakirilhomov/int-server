@@ -31,6 +31,7 @@ router.post(
 router.get("/survey-stats", auth, isAdmin, internCtrl.getSurveyStats);
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
 router.get("/me/weekly-plan", auth, internCtrl.getMyWeeklyPlan);
+router.post("/me/self-activate", auth, internCtrl.selfActivateWeeklyPlan);
 router.get('/', auth, resolveActiveBranch, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
@@ -41,6 +42,7 @@ router.patch("/:id/upgrade", auth, isAdmin, internCtrl.upgradeInternGrade);
 router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
 router.patch("/:id/head-intern", auth, isAdmin, internCtrl.setHeadIntern);
 router.patch("/:id/activation", auth, isAdmin, internCtrl.setInternActivation);
+router.patch("/:id/clear-block", auth, isAdmin, internCtrl.clearWeeklyPlanBlock);
 router.patch("/:id/freeze", auth, isAdmin, internCtrl.freezeIntern);
 router.patch("/:id/unfreeze", auth, isAdmin, internCtrl.unfreezeIntern);
 router.patch("/:id/archive", auth, isAdmin, internCtrl.archiveIntern);

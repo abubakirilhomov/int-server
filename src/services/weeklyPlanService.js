@@ -15,6 +15,8 @@
 
 const Intern = require("../models/internModel");
 const Lesson = require("../models/lessonModel");
+const Subscription = require("../models/subscriptionModel");
+const webpush = require("web-push");
 
 // Tashkent — стабильный UTC+5, без DST.
 const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -178,6 +180,13 @@ async function evaluateWeeklyPlans({
     if (!dryRun) {
       intern.weeklyPlan = wp;
       await intern.save();
+      // Fire-and-forget push, only on status change. Failing pushes log
+      // but don't break the cron loop.
+      if (newStatus !== prevStatus) {
+        notifyWeeklyTransition(intern, prevStatus, newStatus, target, total).catch(
+          (e) => console.error(`[weekly] push failed for ${intern._id}:`, e.message)
+        );
+      }
     }
   }
 
@@ -188,6 +197,56 @@ async function evaluateWeeklyPlans({
     skippedCount: skipped,
     details,
   };
+}
+
+/**
+ * Web-push на переходы weekly-plan. Тексты — короткие, без preview-фрейминга
+ * (Phase 2 уже enforcement). Шлёт всем подпискам интерна. 410/404 → чистим
+ * мёртвые подписки. Telegram-копии пока не шлём — для этого нужна отдельная
+ * инфраструктура для intern chatId (см. рекомендацию в шапке файла).
+ */
+async function notifyWeeklyTransition(intern, fromStatus, toStatus, target, total) {
+  let payload = null;
+  if (toStatus === "ok" && fromStatus !== "ok") {
+    payload = {
+      title: "🔥 Неделя пройдена!",
+      body: `${total}/${target} уроков. Стрик: ${intern.weeklyPlan?.streakWeeks || 0} нед. подряд.`,
+    };
+  } else if (toStatus === "restricted") {
+    payload = {
+      title: "⛔ Аккаунт ограничен",
+      body: `Прошлая неделя: ${total}/${target} уроков. Реактивируй в дашборде — без админа.`,
+    };
+  } else if (toStatus === "admin_block") {
+    payload = {
+      title: "🚫 Аккаунт заблокирован",
+      body:
+        "Лимит самоактиваций исчерпан или две недели подряд без плана. Обратись к менеджеру.",
+    };
+  }
+  if (!payload) return;
+
+  const subs = await Subscription.find({
+    userId: intern._id,
+    userType: { $in: ["intern", "Intern"] },
+  });
+  if (subs.length === 0) return;
+
+  const body = JSON.stringify(payload);
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: sub.keys },
+        body
+      );
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await Subscription.deleteOne({ _id: sub._id });
+      } else {
+        console.error(`[weekly-push] ${intern._id}: ${err.message}`);
+      }
+    }
+  }
 }
 
 /**

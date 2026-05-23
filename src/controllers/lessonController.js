@@ -37,12 +37,23 @@ exports.createLesson = catchAsync(async (req, res) => {
         freezeInfo: intern.freezeInfo || null,
       });
     }
-    const planStatus = await getInternPlanStatus(intern);
-    if (planStatus.isPlanBlocked) {
+    // Phase 2: enforce on weeklyPlan.status (vault/weekly-self-activation-plan).
+    // Replaces the old daily isPlanBlocked check. Cron sets status every
+    // Monday 00:30 Tashkent; intern can self-activate from restricted up to
+    // 2× / calendar month via POST /interns/me/self-activate.
+    const wpStatus = intern.weeklyPlan?.status || "ok";
+    if (wpStatus === "restricted") {
       return res.status(403).json({
         message:
-          "Аккаунт ограничен: план к текущей дате не выполнен. Основные функции временно недоступны.",
-        planStatus,
+          "Аккаунт ограничен — план за прошлую неделю не выполнен. Реактивируй аккаунт в дашборде.",
+        weeklyPlanStatus: wpStatus,
+      });
+    }
+    if (wpStatus === "admin_block") {
+      return res.status(403).json({
+        message:
+          "Аккаунт заблокирован: лимит самоактиваций исчерпан или две недели подряд без выполнения плана. Обратись к менеджеру.",
+        weeklyPlanStatus: wpStatus,
       });
     }
 

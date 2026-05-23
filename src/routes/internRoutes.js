@@ -4,6 +4,7 @@ const internCtrl = require('../controllers/internController');
 const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 const isHeadIntern = require('../middleware/isHeadIntern');
+const resolveActiveBranch = require('../middleware/resolveActiveBranch');
 const validateRequest = require('../middleware/validateRequest');
 const { createInternSchema } = require('../validations/internValidation');
 const { submitInternshipSurveySchema } = require('../validations/internshipSurveyValidation');
@@ -11,7 +12,7 @@ const { submitInternshipSurveySchema } = require('../validations/internshipSurve
 router.get('/rating', auth, internCtrl.getInternsRating);
 router.get('/client-rating', auth, internCtrl.getRatings)
 router.get('/pending-interns', auth, internCtrl.getPendingInterns)
-router.get('/branch-manager/interns', auth, internCtrl.getBranchManagerInterns);
+router.get('/branch-manager/interns', auth, resolveActiveBranch, internCtrl.getBranchManagerInterns);
 router.get('/frozen', auth, isAdmin, internCtrl.getFrozenInterns);
 router.get('/archived', auth, isAdmin, internCtrl.getArchivedInterns);
 router.post('/', auth, isAdmin, validateRequest(createInternSchema), internCtrl.createIntern);
@@ -29,7 +30,7 @@ router.post(
 );
 router.get("/survey-stats", auth, isAdmin, internCtrl.getSurveyStats);
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
-router.get('/', auth, internCtrl.getInterns); // доступен и админу, и ментору
+router.get('/', auth, resolveActiveBranch, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
@@ -45,6 +46,6 @@ router.patch("/:id/archive", auth, isAdmin, internCtrl.archiveIntern);
 router.patch("/:id/unarchive", auth, isAdmin, internCtrl.unarchiveIntern);
 router.post("/:id/reset-password", auth, isAdmin, internCtrl.resetPassword);
 router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
-router.post("/:id/complaints", auth, internCtrl.addBranchManagerComplaint);
+router.post("/:id/complaints", auth, resolveActiveBranch, internCtrl.addBranchManagerComplaint);
 
 module.exports = router;

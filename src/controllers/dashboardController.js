@@ -3,6 +3,7 @@ const User = require("../models/internModel");
 const grades = require("../config/grades");
 const GradeConfig = require("../models/gradeConfigModel");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
+const { getWeeklyPlanView } = require("../services/weeklyPlanService");
 
 const MAX_SCORE = 5;
 const PROMOTION_THRESHOLD = 50;
@@ -142,6 +143,9 @@ exports.getDashboardStats = async (req, res) => {
         // --- Average Score ---
         const averageScore = user.score.toFixed(2) || 0;
         const planStatus = await getInternPlanStatus(user, now);
+        // Phase 1 shadow-mode: weeklyPlan живёт параллельно planStatus.
+        // Lessons controller пока его не читает — это enforcement из Phase 2.
+        const weeklyPlan = await getWeeklyPlanView(user, now);
 
         // --- Probation Object ---
         let probation = null;
@@ -256,6 +260,7 @@ exports.getDashboardStats = async (req, res) => {
             recentLessons: recentLessonsData,
             recentReviews: recentReviews,
             planStatus,
+            weeklyPlan,
             streak: {
                 current: user.currentStreak || 0,
                 longest: user.longestStreak || 0,

@@ -30,6 +30,7 @@ router.post(
 );
 router.get("/survey-stats", auth, isAdmin, internCtrl.getSurveyStats);
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
+router.get("/me/weekly-plan", auth, internCtrl.getMyWeeklyPlan);
 router.get('/', auth, resolveActiveBranch, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);

@@ -5,6 +5,7 @@ const Lesson = require("../models/lessonModel");
 const Subscription = require("../models/subscriptionModel");
 const Intern = require("../models/internModel");
 const { resetStaleStreaks } = require("./streakService");
+const { evaluateWeeklyPlans } = require("./weeklyPlanService");
 
 // Настройка web-push (ключи должны быть в .env)
 const publicVapidKey = process.env.VAPID_PUBLIC_KEY;
@@ -42,6 +43,26 @@ class CronService {
                 console.error("❌ Error resetting manual activations:", error);
             }
         });
+
+        // Каждый понедельник в 00:30 Asia/Tashkent — оценка прошлой недели по
+        // weeklyPlan. Сейчас shadow-mode: пишет в БД, lessonController пока не
+        // читает (enforcement в Phase 2). См.
+        // vault/10-projects/interns-system/weekly-self-activation-plan.md.
+        cron.schedule(
+            "30 0 * * 1",
+            async () => {
+                console.log("📅 Weekly plan evaluation starting (shadow-mode)...");
+                try {
+                    const result = await evaluateWeeklyPlans();
+                    console.log(
+                        `✅ Weekly plan: ${result.okCount} ok, ${result.restrictedCount} restricted, ${result.adminBlockCount} admin_block (${result.skippedCount} skipped)`
+                    );
+                } catch (error) {
+                    console.error("❌ Error in weekly plan evaluation:", error);
+                }
+            },
+            { timezone: "Asia/Tashkent" }
+        );
 
         console.log("✅ Cron jobs initialized");
     }

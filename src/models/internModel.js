@@ -219,6 +219,47 @@ const internSchema = new mongoose.Schema({
     },
     proCourseCompleted: { type: Boolean, default: null },
   },
+
+  // Недельный цикл плана + self-recovery (см. docs/weekly-self-activation-plan
+  // и vault/10-projects/interns-system/weekly-self-activation-plan.md).
+  // Заменяет ежедневную проверку isPlanBlocked: cron оценивает прошлую неделю
+  // каждый понедельник 00:30 Asia/Tashkent и выставляет status. На фазе 1
+  // (shadow-mode) поле пишется, но enforcement в lessonController пока не
+  // включён — старая логика manualActivation продолжает действовать.
+  weeklyPlan: {
+    // ok = норма, at_risk = считается на лету (в БД не пишется), restricted =
+    // не выполнен план, доступна self-activate, admin_block = жёсткий блок.
+    status: {
+      type: String,
+      enum: ["ok", "restricted", "admin_block"],
+      default: "ok",
+      index: true,
+    },
+    // 🔥 счётчик недель подряд "на плане". Сбрасывается при fail-week.
+    streakWeeks: { type: Number, default: 0 },
+    longestStreakWeeks: { type: Number, default: 0 },
+
+    // Метаданные последнего cron-прогона по этому интерну.
+    lastEvaluatedAt: { type: Date },
+    currentWeekStartAt: { type: Date },
+    currentWeekTarget: { type: Number, default: 0 },
+    currentWeekConfirmed: { type: Number, default: 0 },
+
+    // Когда стал restricted — для UI "вы в блоке N дней".
+    restrictedSince: { type: Date, default: null },
+
+    // История самостоятельных активаций. Счётчик "2/месяц" вычисляется
+    // фильтром по activatedAt в текущем календарном месяце.
+    selfActivations: [
+      {
+        activatedAt: { type: Date, default: Date.now },
+        weekStartAt: { type: Date },
+        deficitAtTime: { type: Number },
+        targetAtTime: { type: Number },
+        notes: { type: String, trim: true, default: "" },
+      },
+    ],
+  },
 });
 
 // Virtuals for backward compatibility

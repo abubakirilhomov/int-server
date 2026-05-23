@@ -13,6 +13,7 @@ const AppError = require("../utils/AppError");
 const internService = require("../services/internService");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getAllBadgeStatuses } = require("../services/badgeService");
+const { getWeeklyPlanView } = require("../services/weeklyPlanService");
 const { setRefreshCookie, clearRefreshCookie } = require("../utils/refreshCookie");
 
 exports.loginIntern = catchAsync(async (req, res) => {
@@ -275,6 +276,18 @@ exports.getInternProfile = catchAsync(async (req, res) => {
 exports.getInterns = catchAsync(async (req, res) => {
   const interns = await internService.getInterns(req.user);
   res.json(interns);
+});
+
+// Weekly plan view собственного аккаунта (Phase 1 shadow-mode).
+// Возвращает status, streak, current week stats, activationsLeft, at_risk.
+// Фронт может poll'ить отдельно от дашборда для обновления индикатора.
+exports.getMyWeeklyPlan = catchAsync(async (req, res) => {
+  const intern = await Intern.findById(req.user.id).select(
+    "weeklyPlan bonusLessons lessonsPerMonth"
+  );
+  if (!intern) return res.status(404).json({ message: "Стажёр не найден" });
+  const view = await getWeeklyPlanView(intern);
+  res.json(view);
 });
 
 // Обновление стажёра

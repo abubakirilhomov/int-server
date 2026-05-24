@@ -21,19 +21,28 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-// Direct mirror of the legacy router. The fallback points to Abubakir so a
-// new sphere added to grades.js without a routing update never silently drops.
+// Routing mirror of the legacy internUp client logic. Fallback points to
+// Abubakir so a new sphere added to grades.js without a routing update never
+// silently drops. alwaysInclude duplicates every application to the shared
+// MARS lead group, like the old client-side bot did.
+//
+// Chat IDs updated 2026-05-24 with the authoritative values from the team
+// (Nuriddin's prior 6255299983 was stale).
+const ABUBAKIR = "1844909205";
+const NURIDDIN = "1921911753";
+const MAIN_GROUP = "-5297765126";
+
 const ROUTING = {
   routes: [
-    { spheres: ["backend-python"], chatIds: ["6255299983"] },           // Nuriddin
+    { spheres: ["backend-python"], chatIds: [NURIDDIN] },
     {
       spheres: ["frontend-react", "backend-nodejs", "full-stack"],
-      chatIds: ["1844909205"],                                           // Abubakir
+      chatIds: [ABUBAKIR],
     },
-    { spheres: ["mern-stack"], chatIds: ["1844909205", "6255299983"] }, // Both
+    { spheres: ["mern-stack"], chatIds: [ABUBAKIR, NURIDDIN] },
   ],
-  fallbackChatIds: ["1844909205"],
-  alwaysInclude: [],
+  fallbackChatIds: [ABUBAKIR],
+  alwaysInclude: [MAIN_GROUP],
 };
 
 (async () => {

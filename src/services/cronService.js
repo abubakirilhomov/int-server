@@ -6,6 +6,19 @@ const Subscription = require("../models/subscriptionModel");
 const Intern = require("../models/internModel");
 const { resetStaleStreaks } = require("./streakService");
 const { evaluateWeeklyPlans } = require("./weeklyPlanService");
+const Interview = require("../models/interviewModel");
+const Setting = require("../models/settingModel");
+const { sendMessage } = require("./telegramService");
+
+// Tashkent — стабильный UTC+5.
+const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
+const tashkentDayBounds = (now = new Date()) => {
+    const t = new Date(now.getTime() + TASHKENT_OFFSET_MS);
+    t.setUTCHours(0, 0, 0, 0);
+    const start = new Date(t.getTime() - TASHKENT_OFFSET_MS);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+    return { start, end };
+};
 
 // Настройка web-push (ключи должны быть в .env)
 const publicVapidKey = process.env.VAPID_PUBLIC_KEY;
@@ -64,7 +77,64 @@ class CronService {
             { timezone: "Asia/Tashkent" }
         );
 
+        // Каждый день в 08:00 Asia/Tashkent — напоминание о собеседованиях на сегодня.
+        cron.schedule(
+            "0 8 * * *",
+            async () => {
+                console.log("📋 Running interview reminder job...");
+                try {
+                    await this.notifyTodayInterviews();
+                } catch (error) {
+                    console.error("❌ Error in interview reminder job:", error);
+                }
+            },
+            { timezone: "Asia/Tashkent" }
+        );
+
         console.log("✅ Cron jobs initialized");
+    }
+
+    async notifyTodayInterviews() {
+        const settingDoc = await Setting.findOne({ key: "interviewSettings" }).lean();
+        const chatIds = settingDoc?.value?.reminderChatIds || [];
+        if (!chatIds.length) {
+            console.log("ℹ️ No interview reminderChatIds configured — skipping");
+            return;
+        }
+
+        const { start, end } = tashkentDayBounds();
+        const interviews = await Interview.find({
+            status: "scheduled",
+            scheduledAt: { $gte: start, $lte: end },
+        })
+            .sort({ scheduledAt: 1 })
+            .populate("application", "firstName lastName phone telegramUsername")
+            .lean();
+
+        if (!interviews.length) {
+            console.log("ℹ️ No interviews scheduled today — no reminder sent");
+            return;
+        }
+
+        const fmtTime = (d) =>
+            new Intl.DateTimeFormat("ru-RU", {
+                timeZone: "Asia/Tashkent",
+                hour: "2-digit",
+                minute: "2-digit",
+            }).format(new Date(d));
+
+        const TRACK = { "frontend-react": "Frontend React", "backend-nodejs": "Backend Node" };
+        const lines = [`📋 Собеседования сегодня (${interviews.length}):`, ""];
+        for (const iv of interviews) {
+            const a = iv.application || {};
+            const name = `${a.firstName || ""} ${a.lastName || ""}`.trim() || "—";
+            const tg = a.telegramUsername ? ` @${a.telegramUsername}` : "";
+            lines.push(`• ${fmtTime(iv.scheduledAt)} — ${name} (${TRACK[iv.track] || iv.track})${tg}`);
+        }
+
+        const result = await sendMessage(chatIds, lines.join("\n"));
+        console.log(`📋 Interview reminder: sent ${result.sent}, failed ${result.failed}`);
+        if (result.errors?.length) console.warn("   errors:", result.errors.join(" | "));
     }
 
     async notifyMentorsWithDebt() {

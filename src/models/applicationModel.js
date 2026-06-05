@@ -45,6 +45,16 @@ const applicationSchema = new mongoose.Schema(
     rejectionReason: { type: String, trim: true, default: "" },
     interviewDate: { type: Date, default: null },
 
+    // Доп. поля для приёма по собеседованию (из учётной таблицы)
+    parentPhone: { type: String, trim: true, default: "" },
+    schoolNumber: { type: String, trim: true, default: "" },
+    monthsAtMars: { type: Number, default: null },
+
+    // Цикл собеседований: после провала ставится дата, до которой пересдача
+    // заблокирована (кулдаун). lastInterviewAt — для удобной сортировки/истории.
+    cooldownUntil: { type: Date, default: null },
+    lastInterviewAt: { type: Date, default: null },
+
     source: { type: String, default: "internUp" },
 
     submitterIp: { type: String, default: "", select: false },

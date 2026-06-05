@@ -42,6 +42,7 @@ router.post(
 );
 
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
+router.post("/admin-create", auth, isAdmin, controller.adminCreate);
 router.get("/", auth, isAdmin, controller.list);
 router.get("/:id", auth, isAdmin, controller.getOne);
 router.patch(

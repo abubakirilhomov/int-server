@@ -158,9 +158,36 @@ async function notifyApplication(application, opts = {}) {
   return { sent: succeeded.length, failed: errors.length, errors };
 }
 
+/**
+ * Отправляет произвольный текст в один или несколько чатов. По умолчанию текст
+ * экранируется под MarkdownV2 (plain). Передай opts.raw=true, если текст уже в
+ * валидном MarkdownV2. Никогда не бросает — возвращает { sent, failed, errors }.
+ * Используется cron-напоминанием о собесах и письмами-результатами.
+ */
+async function sendMessage(chatIds, text, opts = {}) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    return { sent: 0, failed: 0, errors: ["TELEGRAM_BOT_TOKEN not configured"] };
+  }
+  const ids = (Array.isArray(chatIds) ? chatIds : [chatIds]).map(String).filter(Boolean);
+  if (ids.length === 0) return { sent: 0, failed: 0, errors: ["no chat ids"] };
+
+  const payload = opts.raw ? text : escapeMarkdown(text);
+  const results = await Promise.allSettled(ids.map((cid) => sendToChat(token, cid, payload)));
+
+  const errors = [];
+  let sent = 0;
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") sent += 1;
+    else errors.push(`${ids[i]}: ${r.reason?.message || r.reason}`);
+  });
+  return { sent, failed: errors.length, errors };
+}
+
 module.exports = {
   notifyApplication,
   resolveRecipients,
+  sendMessage,
   SPHERE_LABELS,
   SHIFT_LABELS,
 };

@@ -147,6 +147,92 @@ exports.submit = catchAsync(async (req, res, next) => {
     .catch((err) => console.error("notifyApplication failed:", err));
 });
 
+// ─── ADMIN: create candidate manually ─────────────────────────────────────────
+// Многие кандидаты приходят прямо в Telegram, а не через форму internUp.
+// Тот же набор проверок/нормализаций, что submit, но без rate-limit и с
+// доп. полями (родитель/школа/месяцы), source: "manual".
+exports.adminCreate = catchAsync(async (req, res, next) => {
+  const {
+    fullName,
+    firstName: fnRaw,
+    lastName: lnRaw,
+    phone,
+    parentPhone,
+    telegramUsername,
+    age,
+    branchId,
+    mentorId,
+    sphere,
+    shift,
+    schoolNumber,
+    monthsAtMars,
+  } = req.body;
+
+  let firstName = (fnRaw || "").trim();
+  let lastName = (lnRaw || "").trim();
+  if (fullName && (!firstName || !lastName)) {
+    const split = splitFullName(fullName);
+    firstName = firstName || split.firstName;
+    lastName = lastName || split.lastName;
+  }
+  if (!firstName || !lastName) {
+    return next(new AppError("Укажите имя и фамилию", 400));
+  }
+
+  const normalizedPhone = normalizePhone(phone);
+  if (!PHONE_RE.test(normalizedPhone)) {
+    return next(new AppError("Телефон в неверном формате", 400));
+  }
+
+  const normalizedUsername = normalizeUsername(telegramUsername);
+  if (!USERNAME_RE.test(normalizedUsername)) {
+    return next(new AppError("Telegram username неверный", 400));
+  }
+
+  if (!isValidObjectId(branchId) || !isValidObjectId(mentorId)) {
+    return next(new AppError("Некорректный филиал или ментор", 400));
+  }
+  const branch = await Branch.findById(branchId).lean();
+  if (!branch) return next(new AppError("Филиал не найден", 400));
+  const mentor = await Mentor.findById(mentorId).lean();
+  if (!mentor) return next(new AppError("Ментор не найден", 400));
+
+  const cutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
+  const existing = await Application.findOne({
+    $or: [{ phone: normalizedPhone }, { telegramUsername: normalizedUsername }],
+    createdAt: { $gte: cutoff },
+    status: { $in: ACTIVE_STATUSES },
+  }).lean();
+  if (existing) {
+    return next(
+      new AppError("Активная заявка с таким телефоном/телеграмом уже есть", 409)
+    );
+  }
+
+  const application = await Application.create({
+    firstName,
+    lastName,
+    phone: normalizedPhone,
+    parentPhone: parentPhone ? normalizePhone(parentPhone) : "",
+    telegramUsername: normalizedUsername,
+    age,
+    branch: branchId,
+    mentor: mentorId,
+    sphere: sphere || "frontend-react",
+    shift: shift || "morning",
+    schoolNumber: schoolNumber ? String(schoolNumber).trim() : "",
+    monthsAtMars:
+      monthsAtMars !== undefined && monthsAtMars !== null && monthsAtMars !== ""
+        ? Number(monthsAtMars)
+        : null,
+    source: "manual",
+    reviewedBy: req.user.id || req.user._id,
+    reviewedAt: new Date(),
+  });
+
+  res.status(201).json(application);
+});
+
 // ─── ADMIN: list ──────────────────────────────────────────────────────────────
 exports.list = catchAsync(async (req, res) => {
   const {

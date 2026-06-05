@@ -6,6 +6,10 @@ const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const { googleCalendarLink } = require("../utils/calendarLink");
 const { SPHERE_LABELS } = require("../services/telegramService");
+const InterviewTopic = require("../models/interviewTopicModel");
+const Setting = require("../models/settingModel");
+const { computeScore } = require("../utils/scoreInterview");
+const { buildLetters } = require("../utils/roadmapLetter");
 
 const isValidObjectId = (id) => mongoose.isValidObjectId(id);
 
@@ -211,4 +215,65 @@ exports.reschedule = catchAsync(async (req, res, next) => {
 
   const full = await populateApplication(Interview.findById(interview._id));
   res.json(decorate(full));
+});
+
+// ─── ADMIN: оценка собеседования (банк тем + автоподсчёт + письмо) ─────────────
+exports.score = catchAsync(async (req, res, next) => {
+  if (!isValidObjectId(req.params.id)) return next(new AppError("Некорректный ID", 400));
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return next(new AppError("Нет оценок по темам", 400));
+  }
+
+  const interview = await Interview.findById(req.params.id);
+  if (!interview) return next(new AppError("Собеседование не найдено", 404));
+
+  const app = await Application.findById(interview.application);
+  if (!app) return next(new AppError("Заявка не найдена", 404));
+
+  const settingDoc = await Setting.findOne({ key: "interviewSettings" }).lean();
+  const cfg = settingDoc?.value || {};
+  const threshold = Number(cfg.passThreshold ?? 80);
+  const partialCredit = Number(cfg.partialCredit ?? 0.5);
+  const cooldownDays = Number(cfg.cooldownDays ?? 7);
+
+  const topicIds = items.map((i) => i.topicId).filter(isValidObjectId);
+  const topics = await InterviewTopic.find({ _id: { $in: topicIds } }).lean();
+  const byId = new Map(topics.map((t) => [String(t._id), t]));
+
+  const result = computeScore(items, byId, { partialCredit, threshold });
+  if (result.total === 0) {
+    return next(new AppError("Не найдено ни одной валидной темы", 400));
+  }
+
+  interview.items = result.snapItems;
+  interview.scoreEarned = result.earned;
+  interview.scoreTotal = result.total;
+  interview.percentage = result.percentage;
+  interview.passed = result.passed;
+  interview.roadmap = result.roadmap;
+  interview.status = "completed";
+  interview.conductedAt = new Date();
+  interview.cooldownUntil = result.passed
+    ? null
+    : new Date(Date.now() + cooldownDays * 86400000);
+  await interview.save();
+
+  app.lastInterviewAt = new Date();
+  app.cooldownUntil = result.passed ? null : interview.cooldownUntil;
+  await app.save();
+
+  const letter = buildLetters({
+    candidateName: `${app.firstName || ""} ${app.lastName || ""}`.trim(),
+    earned: result.earned,
+    total: result.total,
+    percentage: result.percentage,
+    passed: result.passed,
+    roadmap: result.roadmap,
+    cooldownUntil: interview.cooldownUntil,
+    threshold,
+  });
+
+  const full = await populateApplication(Interview.findById(interview._id));
+  res.json({ interview: decorate(full), letter });
 });

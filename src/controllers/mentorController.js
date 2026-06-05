@@ -8,9 +8,10 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { setRefreshCookie, clearRefreshCookie } = require("../utils/refreshCookie");
+const isAdminUser = require("../utils/isAdminUser");
 
 exports.createMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId } = req.body;
+  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId, isAdmin } = req.body;
   if (!name || !password) {
     throw new AppError("Name and password are required", 400);
   }
@@ -31,6 +32,7 @@ exports.createMentor = catchAsync(async (req, res) => {
     password: hashedPassword,
     branches: branchList,
     role: ["mentor", "admin", "branchManager"].includes(role) ? role : "mentor",
+    isAdmin: isAdmin === true,
     profilePhoto: profilePhoto || "",
     telegramChatId: typeof telegramChatId === "string" ? telegramChatId.trim() : "",
   });
@@ -40,7 +42,7 @@ exports.createMentor = catchAsync(async (req, res) => {
 });
 
 exports.getMentors = catchAsync(async (req, res) => {
-  const select = req.user?.role === "admin" ? "+telegramChatId" : "";
+  const select = isAdminUser(req.user) ? "+telegramChatId" : "";
   const mentors = await Mentor.find().select(select).populate("branches", "name");
   res.json(mentors);
 });
@@ -51,7 +53,7 @@ exports.deleteMentor = catchAsync(async (req, res) => {
 });
 
 exports.updateMentor = catchAsync(async (req, res) => {
-  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId } = req.body;
+  const { name, lastName, password, branch, branches, role, profilePhoto, telegramChatId, isAdmin } = req.body;
   const { id } = req.params;
 
   // Find the mentor (select password field for potential update)
@@ -70,6 +72,7 @@ exports.updateMentor = catchAsync(async (req, res) => {
     mentor.branches = [branch];
   }
   if (role && ['mentor', 'admin', 'branchManager'].includes(role)) mentor.role = role;
+  if (typeof isAdmin === "boolean") mentor.isAdmin = isAdmin;
   if (profilePhoto !== undefined) mentor.profilePhoto = profilePhoto;
   if (telegramChatId !== undefined) {
     mentor.telegramChatId = typeof telegramChatId === "string" ? telegramChatId.trim() : "";
@@ -164,6 +167,7 @@ exports.loginMentor = catchAsync(async (req, res) => {
     {
       id: mentor._id,
       role: mentor.role,
+      isAdmin: mentor.isAdmin === true,
       branchIds,
       branchId: branchIds[0] || null,
       name: mentor.name,
@@ -188,6 +192,7 @@ exports.loginMentor = catchAsync(async (req, res) => {
       name: mentor.name,
       lastName: mentor.lastName,
       role: mentor.role,
+      isAdmin: mentor.isAdmin === true,
       branchIds,
       branchId: branchIds[0] || null,
       branches: branchObjs,
@@ -220,6 +225,7 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
       {
         id: mentor._id,
         role: mentor.role,
+        isAdmin: mentor.isAdmin === true,
         branchIds,
         branchId: branchIds[0] || null,
         name: mentor.name,
@@ -245,6 +251,7 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
         name: mentor.name,
         lastName: mentor.lastName,
         role: mentor.role,
+        isAdmin: mentor.isAdmin === true,
         branchIds,
         branchId: branchIds[0] || null,
         branches: branchObjs,
@@ -264,7 +271,7 @@ exports.logoutMentor = catchAsync(async (req, res) => {
       jti,
       exp: new Date(exp * 1000),
       userId: String(id),
-      userType: req.user.role === "admin" ? "admin" : "mentor",
+      userType: isAdminUser(req.user) ? "admin" : "mentor",
     }).catch((err) => {
       if (err.code !== 11000) throw err;
     });
@@ -282,7 +289,7 @@ exports.logoutMentor = catchAsync(async (req, res) => {
           jti: decoded.jti,
           exp: new Date(decoded.exp * 1000),
           userId: String(decoded.id || id),
-          userType: req.user.role === "admin" ? "admin" : "mentor",
+          userType: isAdminUser(req.user) ? "admin" : "mentor",
         }).catch((err) => {
           if (err.code !== 11000) throw err;
         });

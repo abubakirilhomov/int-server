@@ -40,6 +40,7 @@ const issueInternalSession = async (user, kind) => {
       {
         id: user._id,
         role: user.role,
+        isAdmin: user.isAdmin === true,
         branchIds,
         branchId: branchIds[0] || null,
         name: user.name,
@@ -62,6 +63,7 @@ const issueInternalSession = async (user, kind) => {
         name: user.name,
         lastName: user.lastName,
         role: user.role,
+        isAdmin: user.isAdmin === true,
         branchIds,
         branchId: branchIds[0] || null,
         branches: branchObjs,

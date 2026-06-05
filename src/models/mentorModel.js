@@ -11,6 +11,10 @@ const mentorSchema = new mongoose.Schema({
     enum: ['mentor', 'admin', 'branchManager'],
     default: 'mentor'
   },
+  // Админ-доступ, ортогональный к `role`. Позволяет ментору оставаться
+  // выбираемым учебным ментором (role: "mentor") и одновременно иметь админку.
+  // Легаси-аккаунты с role: "admin" продолжают считаться админами (см. utils/isAdminUser).
+  isAdmin: { type: Boolean, default: false },
   marsId: {
     sub: { type: String, index: { unique: true, sparse: true } },
     handle: { type: String, trim: true },

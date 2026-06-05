@@ -7,6 +7,7 @@ const grades = require("../config/grades");
 const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
+const isAdminUser = require("../utils/isAdminUser");
 
 class InternService {
     async createIntern(data) {
@@ -211,7 +212,7 @@ class InternService {
         let intern;
 
         // 🔹 Если админ и указан ID → можно смотреть чужой профиль
-        if (user?.role === "admin" && id) {
+        if (isAdminUser(user) && id) {
             intern = await Intern.findById(id)
                 .select("-password")
                 .populate("branches.branch", "name telegramLink")
@@ -233,7 +234,7 @@ class InternService {
         // 🔹 PII сокрытие: phoneNumber/telegram видят только сам интерн и админ
         const requesterId = String(user?._id || user?.id || "");
         const isSelf = requesterId && requesterId === String(intern._id);
-        const isAdmin = user?.role === "admin";
+        const isAdmin = isAdminUser(user);
         const canSeePII = isSelf || isAdmin;
 
         // 🔹 Инфо о грейде
@@ -285,7 +286,7 @@ class InternService {
             isFrozen: intern.status === "frozen",
             isArchived: intern.status === "archived",
             freezeInfo: intern.status === "frozen" ? intern.freezeInfo || null : null,
-            archiveInfo: intern.status === "archived" || user?.role === "admin"
+            archiveInfo: intern.status === "archived" || isAdminUser(user)
                 ? intern.archiveInfo || null
                 : null,
             goal,
@@ -325,7 +326,7 @@ class InternService {
 
         // PII / sensitive fields: hidden from peer-intern responses;
         // admin and mentors get full data (mentors need phone/telegram for outreach).
-        const isAdmin = user?.role === "admin";
+        const isAdmin = isAdminUser(user);
         const isMentor = user?.role === "mentor" || user?.role === "branchManager";
         const peerProjection = "-password -phoneNumber -telegram -violations -feedbacks -complaints";
         const adminMentorProjection = "-password";
@@ -480,7 +481,7 @@ class InternService {
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
         const activeBranchId = user.activeBranchId || user.branchId;
-        if (user.role !== "admin" && !intern.isInBranch(activeBranchId)) {
+        if (!isAdminUser(user) && !intern.isInBranch(activeBranchId)) {
             throw new AppError("Можно отправлять жалобы только на стажёров своего филиала", 403);
         }
 
@@ -505,7 +506,7 @@ class InternService {
                 ruleId: rule._id,
                 date: new Date(),
                 notes: text || `Жалоба от branch manager: ${rule.title}`,
-                issuedBy: user.role === "admin" ? "admin" : "branchManager",
+                issuedBy: isAdminUser(user) ? "admin" : "branchManager",
                 issuedById: user.id || user._id,
             });
         });
@@ -517,7 +518,7 @@ class InternService {
             createdAt: new Date(),
             createdById: user.id || user._id,
             createdByName: user.name ? `${user.name} ${user.lastName || ""}`.trim() : "",
-            createdByRole: user.role === "admin" ? "admin" : "branchManager",
+            createdByRole: isAdminUser(user) ? "admin" : "branchManager",
             status: "new",
         });
 

@@ -10,6 +10,7 @@ const { checkAndAwardBadges } = require("../services/badgeService");
 const { awardXP, XP_REWARDS } = require("../services/xpService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
+const isAdminUser = require("../utils/isAdminUser");
 
 // Only lessons younger than this window force an intern to leave feedback.
 // Anything older is grandfathered: it still appears on the admin "stuck
@@ -162,7 +163,7 @@ exports.getLessonById = catchAsync(async (req, res) => {
     lesson.intern && String(lesson.intern._id || lesson.intern) === requesterId;
   const isAssignedMentor =
     lesson.mentor && String(lesson.mentor._id || lesson.mentor) === requesterId;
-  const isAdmin = req.user.role === "admin";
+  const isAdmin = isAdminUser(req.user);
 
   if (!isOwnerIntern && !isAssignedMentor && !isAdmin) {
     return res.status(403).json({ message: "Forbidden" });

@@ -378,6 +378,10 @@ class InternService {
             delete payload.password;
         }
 
+        const intern = await Intern.findById(id);
+
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
         if (payload.grade) {
             const gradeConfig = grades[payload.grade];
             if (!gradeConfig) {
@@ -389,12 +393,14 @@ class InternService {
             payload.probationPeriod = gradeConfig.trialPeriod;
             payload.lessonsPerMonth = gradeConfig.lessonsPerMonth;
             payload.pluses = gradeConfig.plus;
-            payload.probationStartDate = new Date();
+            // Сбрасываем дату начала испытательного ТОЛЬКО при реальной смене
+            // грейда. Раньше сброс срабатывал при любом сохранении формы (она
+            // всегда шлёт grade) → probationStartDate уезжал на "сегодня", и все
+            // ранее проведённые уроки выпадали из зачёта trial-периода.
+            if (payload.grade !== intern.grade) {
+                payload.probationStartDate = new Date();
+            }
         }
-
-        const intern = await Intern.findById(id);
-
-        if (!intern) throw new AppError("Стажёр не найден", 404);
 
         // Password hashing is handled by the pre-save hook in internModel.js
         // Do NOT hash here — it would cause double-hashing

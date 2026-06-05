@@ -14,5 +14,6 @@ router.get("/:id", controller.getOne);
 router.patch("/:id/status", controller.updateStatus);
 router.patch("/:id/reschedule", controller.reschedule);
 router.patch("/:id/score", controller.score);
+router.get("/:id/letter", controller.letter);
 
 module.exports = router;

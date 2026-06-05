@@ -277,3 +277,44 @@ exports.score = catchAsync(async (req, res, next) => {
   const full = await populateApplication(Interview.findById(interview._id));
   res.json({ interview: decorate(full), letter });
 });
+
+// ─── ADMIN: письмо по уже оценённому собесу (для повторной отправки/ассистента) ──
+exports.letter = catchAsync(async (req, res, next) => {
+  if (!isValidObjectId(req.params.id)) return next(new AppError("Некорректный ID", 400));
+
+  const interview = await Interview.findById(req.params.id).populate(
+    "application",
+    "firstName lastName telegramUsername parentPhone cooldownUntil"
+  );
+  if (!interview) return next(new AppError("Собеседование не найдено", 404));
+  if (interview.passed === null || interview.status !== "completed") {
+    return next(new AppError("Собеседование ещё не оценено", 400));
+  }
+
+  const app = interview.application || {};
+  const settingDoc = await Setting.findOne({ key: "interviewSettings" }).lean();
+  const threshold = Number(settingDoc?.value?.passThreshold ?? 80);
+
+  const letter = buildLetters({
+    candidateName: `${app.firstName || ""} ${app.lastName || ""}`.trim(),
+    earned: interview.scoreEarned,
+    total: interview.scoreTotal,
+    percentage: interview.percentage,
+    passed: interview.passed,
+    roadmap: interview.roadmap,
+    cooldownUntil: interview.cooldownUntil,
+    threshold,
+  });
+
+  res.json({
+    letter,
+    passed: interview.passed,
+    percentage: interview.percentage,
+    recipient: {
+      firstName: app.firstName || "",
+      lastName: app.lastName || "",
+      telegramUsername: app.telegramUsername || "",
+      parentPhone: app.parentPhone || "",
+    },
+  });
+});

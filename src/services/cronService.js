@@ -162,7 +162,7 @@ class CronService {
         const chatIds = cfg.chatIds || [];
         if (!chatIds.length) {
             console.log("ℹ️ No inactivityDigest.chatIds configured — skipping");
-            return;
+            return { skipped: true, reason: "Не настроен inactivityDigest.chatIds" };
         }
         const warnDays = Number(cfg.warnDays ?? 14);
         const listCap = Number(cfg.listCap ?? 60);
@@ -211,12 +211,12 @@ class CronService {
         rows.sort((a, b) => b.daysInactive - a.daysInactive);
 
         if (!rows.length) {
-            await sendMessage(
+            const r = await sendMessage(
                 chatIds,
                 `🟢 Дайджест активности: все активные интерны добавляли урок за последние ${warnDays} дн. Молодцы!`
             );
             console.log("📉 Inactivity digest: nobody inactive");
-            return;
+            return { activeCount: interns.length, inactiveCount: 0, sent: r.sent, failed: r.failed, warnDays };
         }
 
         const header = [
@@ -240,6 +240,13 @@ class CronService {
             `📉 Inactivity digest: ${rows.length} inactive, sent ${result.sent}, failed ${result.failed}`
         );
         if (result.errors?.length) console.warn("   errors:", result.errors.join(" | "));
+        return {
+            activeCount: interns.length,
+            inactiveCount: rows.length,
+            sent: result.sent,
+            failed: result.failed,
+            warnDays,
+        };
     }
 
     async notifyMentorsWithDebt() {

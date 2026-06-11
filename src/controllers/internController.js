@@ -11,6 +11,7 @@ const grades = require("../config/grades");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const internService = require("../services/internService");
+const cronService = require("../services/cronService");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getAllBadgeStatuses } = require("../services/badgeService");
 const { getWeeklyPlanView } = require("../services/weeklyPlanService");
@@ -488,6 +489,13 @@ exports.getFrozenInterns = catchAsync(async (req, res) => {
 exports.getArchivedInterns = catchAsync(async (req, res) => {
   const result = await internService.getArchivedInterns();
   res.json(result);
+});
+
+// Ручной запуск еженедельного дайджеста неактивности (та же логика, что в cron).
+// Шлёт список в Telegram (chatIds из Setting "inactivityDigest") и возвращает сводку.
+exports.runInactivityDigest = catchAsync(async (req, res) => {
+  const result = await cronService.weeklyInactivityDigest();
+  res.json(result || { ok: true });
 });
 
 exports.changePassword = catchAsync(async (req, res) => {

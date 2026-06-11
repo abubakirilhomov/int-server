@@ -29,6 +29,7 @@ router.post(
   internCtrl.submitInternshipSurvey
 );
 router.get("/survey-stats", auth, isAdmin, internCtrl.getSurveyStats);
+router.post("/inactivity-digest/run", auth, isAdmin, internCtrl.runInactivityDigest);
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
 router.get("/me/weekly-plan", auth, internCtrl.getMyWeeklyPlan);
 router.post("/me/self-activate", auth, internCtrl.selfActivateWeeklyPlan);

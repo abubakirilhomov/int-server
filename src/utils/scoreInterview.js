@@ -11,7 +11,8 @@ function computeScore(items, topicsById, opts = {}) {
 
   let earned = 0;
   let total = 0;
-  const roadmap = [];
+  const roadmap = []; // RU (labelRu) — used by RU letter and stored on Interview
+  const roadmapUz = []; // UZ (label) — used by UZ letter
   const snapItems = [];
 
   for (const it of items || []) {
@@ -25,7 +26,10 @@ function computeScore(items, topicsById, opts = {}) {
     else if (it.result === "partial") e = w * partialCredit;
     earned += e;
 
-    if (it.result !== "pass") roadmap.push(t.labelRu || t.label);
+    if (it.result !== "pass") {
+      roadmap.push(t.labelRu || t.label);
+      roadmapUz.push(t.label || t.labelRu);
+    }
 
     snapItems.push({
       topic: t._id,
@@ -48,6 +52,7 @@ function computeScore(items, topicsById, opts = {}) {
     percentage,
     passed: percentage >= threshold,
     roadmap,
+    roadmapUz,
     snapItems,
   };
 }

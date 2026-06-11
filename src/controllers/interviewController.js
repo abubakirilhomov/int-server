@@ -270,6 +270,7 @@ exports.score = catchAsync(async (req, res, next) => {
     percentage: result.percentage,
     passed: result.passed,
     roadmap: result.roadmap,
+    roadmapUz: result.roadmapUz,
     cooldownUntil: interview.cooldownUntil,
     threshold,
   });
@@ -295,6 +296,11 @@ exports.letter = catchAsync(async (req, res, next) => {
   const settingDoc = await Setting.findOne({ key: "interviewSettings" }).lean();
   const threshold = Number(settingDoc?.value?.passThreshold ?? 80);
 
+  // UZ roadmap из снапшота тем (label), RU — из сохранённого interview.roadmap (labelRu).
+  const roadmapUz = (interview.items || [])
+    .filter((i) => i.result !== "pass")
+    .map((i) => i.label || i.labelRu);
+
   const letter = buildLetters({
     candidateName: `${app.firstName || ""} ${app.lastName || ""}`.trim(),
     earned: interview.scoreEarned,
@@ -302,6 +308,7 @@ exports.letter = catchAsync(async (req, res, next) => {
     percentage: interview.percentage,
     passed: interview.passed,
     roadmap: interview.roadmap,
+    roadmapUz,
     cooldownUntil: interview.cooldownUntil,
     threshold,
   });

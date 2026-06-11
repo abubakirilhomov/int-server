@@ -15,14 +15,16 @@ function buildLetters({
   total,
   percentage,
   passed,
-  roadmap = [],
+  roadmap = [], // RU
+  roadmapUz, // UZ — falls back to RU list if not provided
   cooldownUntil,
   threshold = 80,
 }) {
   const score = `${earned}/${total} (${percentage}%)`;
-  const topicsList = roadmap.length
-    ? roadmap.map((t, i) => `${i + 1}. ${t}`).join("\n")
-    : "—";
+  const fmtList = (arr) =>
+    arr && arr.length ? arr.map((t, i) => `${i + 1}. ${t}`).join("\n") : "—";
+  const topicsList = fmtList(roadmap);
+  const topicsListUz = fmtList(roadmapUz && roadmapUz.length ? roadmapUz : roadmap);
   const cd = fmtDate(cooldownUntil);
   const nameRu = candidateName ? `${candidateName}, ` : "";
 
@@ -33,7 +35,7 @@ function buildLetters({
   const nameUz = candidateName ? `${candidateName}, ` : "";
   const uz = passed
     ? `Assalomu alaykum!\n\n${nameUz}tabriklaymiz — internatura suhbatidan muvaffaqiyatli o'tdingiz.\nNatija: ${score}.\nTez orada hisob (akkaunt) va boshlanish bo'yicha siz bilan bog'lanishadi.\n\nXush kelibsiz!`
-    : `Assalomu alaykum!\n\nInternatura suhbati uchun rahmat.\nNatija: ${score}. O'tish uchun kamida ${threshold}% kerak.\n\nTayyorlanish uchun quyidagi mavzularni qayta ko'rib chiqing:\n${topicsList}\n\n${cd ? `Qayta suhbat ${cd} dan keyin mumkin bo'ladi.` : "Qayta suhbat sanasi haqida alohida xabar beramiz."}\nTayyorgarlikda omad!`;
+    : `Assalomu alaykum!\n\nInternatura suhbati uchun rahmat.\nNatija: ${score}. O'tish uchun kamida ${threshold}% kerak.\n\nTayyorlanish uchun quyidagi mavzularni qayta ko'rib chiqing:\n${topicsListUz}\n\n${cd ? `Qayta suhbat ${cd} dan keyin mumkin bo'ladi.` : "Qayta suhbat sanasi haqida alohida xabar beramiz."}\nTayyorgarlikda omad!`;
 
   return { ru, uz };
 }

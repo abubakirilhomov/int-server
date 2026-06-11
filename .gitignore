@@ -56,3 +56,6 @@ Thumbs.db
 # Optional: database files (если используешь SQLite, LokiJS и т.п.)
 *.db
 *.sqlite
+
+# Local operational backups from bulk archive/delete scripts (содержат PII — не коммитим)
+scripts/backup-*.json

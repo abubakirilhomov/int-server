@@ -91,6 +91,21 @@ class CronService {
             { timezone: "Asia/Tashkent" }
         );
 
+        // Каждый понедельник в 09:00 Asia/Tashkent — дайджест неактивных интернов
+        // в админский Telegram (кто давно не добавлял урок). Чтобы не следить вручную.
+        cron.schedule(
+            "0 9 * * 1",
+            async () => {
+                console.log("📉 Running weekly inactivity digest...");
+                try {
+                    await this.weeklyInactivityDigest();
+                } catch (error) {
+                    console.error("❌ Error in inactivity digest job:", error);
+                }
+            },
+            { timezone: "Asia/Tashkent" }
+        );
+
         console.log("✅ Cron jobs initialized");
     }
 
@@ -134,6 +149,96 @@ class CronService {
 
         const result = await sendMessage(chatIds, lines.join("\n"));
         console.log(`📋 Interview reminder: sent ${result.sent}, failed ${result.failed}`);
+        if (result.errors?.length) console.warn("   errors:", result.errors.join(" | "));
+    }
+
+    // Еженедельный дайджест: активные интерны, которые давно не добавляли урок.
+    // Сигнал активности — дата последнего урока (логины мы не пишем). Для тех, у
+    // кого уроков нет, отсчёт идёт от даты прихода — чтобы новичков не флагать.
+    // Конфиг в Setting key "inactivityDigest": { chatIds:[], warnDays:14, listDays:30 }.
+    async weeklyInactivityDigest() {
+        const settingDoc = await Setting.findOne({ key: "inactivityDigest" }).lean();
+        const cfg = settingDoc?.value || {};
+        const chatIds = cfg.chatIds || [];
+        if (!chatIds.length) {
+            console.log("ℹ️ No inactivityDigest.chatIds configured — skipping");
+            return;
+        }
+        const warnDays = Number(cfg.warnDays ?? 14);
+        const listCap = Number(cfg.listCap ?? 60);
+
+        const now = new Date();
+        const dayMs = 24 * 60 * 60 * 1000;
+
+        const interns = await Intern.find({ status: "active" })
+            .select("name lastName dateJoined createdAt branches")
+            .populate("branches.branch", "name")
+            .lean();
+
+        const lastByIntern = new Map(
+            (
+                await Lesson.aggregate([
+                    { $group: { _id: "$intern", last: { $max: "$date" } } },
+                ])
+            ).map((r) => [String(r._id), r.last])
+        );
+
+        const fmtDate = (d) =>
+            d
+                ? new Intl.DateTimeFormat("ru-RU", {
+                      timeZone: "Asia/Tashkent",
+                      day: "2-digit",
+                      month: "2-digit",
+                  }).format(new Date(d))
+                : "—";
+
+        const rows = [];
+        for (const it of interns) {
+            const last = lastByIntern.get(String(it._id)) || null;
+            // нет уроков → точка отсчёта = дата прихода (новичков не флагаем)
+            const anchor = last || it.dateJoined || it.createdAt;
+            if (!anchor) continue;
+            const daysInactive = Math.floor((now - new Date(anchor)) / dayMs);
+            if (daysInactive < warnDays) continue;
+            rows.push({
+                name: `${it.name} ${it.lastName}`.trim(),
+                branch: it.branches?.[0]?.branch?.name || "—",
+                last,
+                daysInactive,
+                neverAdded: !last,
+            });
+        }
+        rows.sort((a, b) => b.daysInactive - a.daysInactive);
+
+        if (!rows.length) {
+            await sendMessage(
+                chatIds,
+                `🟢 Дайджест активности: все активные интерны добавляли урок за последние ${warnDays} дн. Молодцы!`
+            );
+            console.log("📉 Inactivity digest: nobody inactive");
+            return;
+        }
+
+        const header = [
+            `📉 Дайджест неактивности (порог ${warnDays}+ дн)`,
+            `Активных интернов: ${interns.length} · затихли: ${rows.length}`,
+            "",
+        ];
+        const shown = rows.slice(0, listCap);
+        const lines = shown.map(
+            (r) =>
+                `• ${r.name} — ${r.branch} — ${r.daysInactive}дн ${
+                    r.neverAdded ? "(ни одного урока)" : `(послед. ${fmtDate(r.last)})`
+                }`
+        );
+        if (rows.length > shown.length) {
+            lines.push(`…и ещё ${rows.length - shown.length}.`);
+        }
+
+        const result = await sendMessage(chatIds, [...header, ...lines].join("\n"));
+        console.log(
+            `📉 Inactivity digest: ${rows.length} inactive, sent ${result.sent}, failed ${result.failed}`
+        );
         if (result.errors?.length) console.warn("   errors:", result.errors.join(" | "));
     }
 

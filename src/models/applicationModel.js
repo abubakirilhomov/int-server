@@ -33,7 +33,7 @@ const applicationSchema = new mongoose.Schema(
       lowercase: true,
       index: true,
     },
-    age: { type: Number, required: true, min: 14, max: 60 },
+    age: { type: Number, required: true, min: 11, max: 60 },
 
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: true },
     mentor: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", required: true },

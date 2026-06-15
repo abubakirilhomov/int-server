@@ -27,8 +27,8 @@ const submitApplicationSchema = Joi.object({
     .trim()
     .required()
     .messages({ "any.required": "Telegram username majburiy" }),
-  age: Joi.number().integer().min(14).max(60).required().messages({
-    "number.min": "Возраст должен быть не меньше 14",
+  age: Joi.number().integer().min(11).max(60).required().messages({
+    "number.min": "Возраст должен быть не меньше 11",
     "number.max": "Возраст должен быть не больше 60",
     "any.required": "Возраст обязателен",
   }),

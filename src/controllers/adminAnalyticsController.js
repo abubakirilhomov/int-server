@@ -47,11 +47,17 @@ exports.getAnalytics = catchAsync(async (req, res) => {
     // ── 3. Branch comparison ──
     const branchStats = await Intern.aggregate([
       { $match: ACTIVE_FILTER },
-      { $unwind: "$branches" },
+      // Dedupe branches per intern: a multi-branch intern should be counted
+      // once in EACH of their distinct branches, never twice in the same one.
+      // $unwind: "$branches" alone fans out one row per branch entry, so a
+      // duplicate branch entry would double-count the intern and add their
+      // score into a branch average twice.
+      { $set: { branchIds: { $setUnion: [{ $ifNull: ["$branches.branch", []] }, []] } } },
+      { $unwind: "$branchIds" },
       {
         $lookup: {
           from: "branches",
-          localField: "branches.branch",
+          localField: "branchIds",
           foreignField: "_id",
           as: "branchInfo",
         },

@@ -156,11 +156,23 @@ class InternService {
                 planCompletion * 5 * 0.2 +
                 attendanceFactor * 5 * 0.1;
 
+            // Distinct branch names — used so a multi-branch intern is counted
+            // once per branch in the branch leaderboard below, instead of being
+            // bucketed under a phantom combined "A, B" key.
+            const branchNames = [
+                ...new Set(
+                    (intern.branches || [])
+                        .map((b) => b.branch?.name)
+                        .filter(Boolean)
+                ),
+            ];
+
             return {
                 internId: intern._id,
                 name: `${intern.name} ${intern.lastName}`,
                 profilePhoto: intern.profilePhoto || "",
-                branch: intern.branches?.map((b) => b.branch?.name).filter(Boolean).join(", ") || "No branch",
+                branch: branchNames.length ? branchNames.join(", ") : "No branch",
+                branchNames,
                 grade: intern.grade,
                 averageStars: +averageStars.toFixed(2),
                 activityRate: +activityRate.toFixed(2),
@@ -173,11 +185,15 @@ class InternService {
 
         internRatings.sort((a, b) => b.ratingScore - a.ratingScore);
 
-        // Рейтинг филиалов
+        // Рейтинг филиалов — интерн с двумя филиалами учитывается в каждом
+        // филиале по одному разу (а не под объединённым ключом "A, B").
         const branchMap = {};
         for (const i of internRatings) {
-            if (!branchMap[i.branch]) branchMap[i.branch] = [];
-            branchMap[i.branch].push(i.ratingScore);
+            const names = i.branchNames.length ? i.branchNames : ["No branch"];
+            for (const name of names) {
+                if (!branchMap[name]) branchMap[name] = [];
+                branchMap[name].push(i.ratingScore);
+            }
         }
 
         const branchRatings = Object.entries(branchMap)

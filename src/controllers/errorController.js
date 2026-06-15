@@ -21,6 +21,13 @@ const handleDuplicateKeyDB = (err) => {
 const handleJwtError = () => new AppError("Недействительный токен", 401);
 const handleJwtExpired = () => new AppError("Срок действия токена истёк", 401);
 
+const handleMulterError = (err) => {
+    if (err.code === "LIMIT_FILE_SIZE") {
+        return new AppError("Файл слишком большой (максимум 5 МБ)", 400);
+    }
+    return new AppError(err.message || "Ошибка загрузки файла", 400);
+};
+
 const sendErrorDev = (err, res) => {
     res.status(err.statusCode).json({
         status: err.status,
@@ -61,6 +68,7 @@ module.exports = (err, req, res, next) => {
     else if (err.code === 11000) error = handleDuplicateKeyDB(err);
     else if (err.name === "JsonWebTokenError") error = handleJwtError();
     else if (err.name === "TokenExpiredError") error = handleJwtExpired();
+    else if (err.name === "MulterError") error = handleMulterError(err);
 
     sendErrorProd(error, res);
 };

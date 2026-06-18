@@ -136,6 +136,7 @@ app.use("/api/auth/marsid", require("./routes/marsIdAuthRoutes"));
 app.use("/api/applications", require("./routes/applicationRoutes"));
 app.use("/api/interviews", require("./routes/interviewRoutes"));
 app.use("/api/interview-topics", require("./routes/interviewTopicRoutes"));
+app.use("/api/intern-requests", require("./routes/internRequestRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

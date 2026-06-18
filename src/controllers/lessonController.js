@@ -353,7 +353,7 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
     lastDay = new Date(endDate);
   }
 
-  const [interns, lessonAgg, gradeConfigsFromDB] = await Promise.all([
+  const [interns, lessonAgg, gradeConfigsFromDB, lastLessonAgg] = await Promise.all([
     Intern.find({ status: "active" })
       .select("name lastName grade branches probationStartDate createdAt isHeadIntern bonusLessons")
       .populate("branches.branch", "name telegramLink")
@@ -370,7 +370,18 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
     ]),
 
     GradeConfig.find().lean(),
+
+    // Дата последнего урока по каждому интерну — глобально (не за период),
+    // чтобы посчитать «дней без урока». Та же логика, что в дайджесте.
+    Lesson.aggregate([
+      { $group: { _id: "$intern", last: { $max: "$date" } } },
+    ]),
   ]);
+
+  const lastLessonByIntern = new Map(
+    lastLessonAgg.map((r) => [String(r._id), r.last])
+  );
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
   const gradeConfigMap = { ...grades };
   gradeConfigsFromDB.forEach((cfg) => {
@@ -394,6 +405,15 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
     const internId = intern._id.toString();
     const startWorkDate = intern.probationStartDate || intern.createdAt;
     const daysWorking = daysBetween(startWorkDate, now);
+
+    // Дней без урока (глобально). Якорь для тех, кто ни разу не добавлял урок —
+    // дата начала работы, чтобы новичков не считать «давно неактивными».
+    const lastLessonDate = lastLessonByIntern.get(internId) || null;
+    const inactivityAnchor = lastLessonDate || startWorkDate;
+    const daysInactive = inactivityAnchor
+      ? Math.floor((now - new Date(inactivityAnchor)) / DAY_MS)
+      : null;
+    const neverAddedLesson = !lastLessonDate;
 
     const confirmedLessonsCount = lessonMap[internId]?.confirmed || 0;
     const pendingLessonsCount = lessonMap[internId]?.pending || 0;
@@ -428,6 +448,9 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
         percentage: null,
         meetsNorm: null,
         createdAt: intern.createdAt,
+        lastLessonDate,
+        daysInactive,
+        neverAddedLesson,
       };
     }
 
@@ -497,6 +520,9 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
       isOverdue: isOverdue,
       canPromoteWithConcession: canPromoteWithConcession,
       isHeadIntern: intern.isHeadIntern || false,
+      lastLessonDate,
+      daysInactive,
+      neverAddedLesson,
     };
   });
 

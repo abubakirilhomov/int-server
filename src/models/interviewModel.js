@@ -38,6 +38,11 @@ const interviewSchema = new mongoose.Schema(
     interviewer: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },
     attemptNumber: { type: Number, default: 1 },
 
+    // Темы для фокуса при пересдаче — проваленные темы (roadmap) прошлой
+    // попытки. Пусто для первой попытки. Экран оценки повторного собеса по
+    // умолчанию показывает только их.
+    focusTopics: [{ type: mongoose.Schema.Types.ObjectId, ref: "InterviewTopic" }],
+
     // Оценка (Фаза 2) — заполняется через PATCH /interviews/:id/score
     items: { type: [itemSchema], default: [] },
     scoreEarned: { type: Number, default: 0 },

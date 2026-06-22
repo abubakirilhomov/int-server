@@ -69,7 +69,15 @@ const populateApplication = (query) =>
 
 // ─── ADMIN: запланировать собеседование ───────────────────────────────────────
 exports.schedule = catchAsync(async (req, res, next) => {
-  const { applicationId, scheduledAt, track, interviewer } = req.body;
+  const {
+    applicationId,
+    scheduledAt,
+    track,
+    interviewer,
+    fromInterviewId,
+    focusTopics,
+    ignoreCooldown,
+  } = req.body;
 
   if (!isValidObjectId(applicationId)) {
     return next(new AppError("Некорректный ID заявки", 400));
@@ -86,7 +94,8 @@ exports.schedule = catchAsync(async (req, res, next) => {
   }
 
   // Гард кулдауна: пересдача заблокирована до cooldownUntil.
-  if (app.cooldownUntil && when < new Date(app.cooldownUntil)) {
+  // Админ может явно проигнорировать кулдаун (ignoreCooldown).
+  if (!ignoreCooldown && app.cooldownUntil && when < new Date(app.cooldownUntil)) {
     const until = new Intl.DateTimeFormat("ru-RU", {
       timeZone: "Asia/Tashkent",
       dateStyle: "short",
@@ -98,6 +107,26 @@ exports.schedule = catchAsync(async (req, res, next) => {
 
   const priorCount = await Interview.countDocuments({ application: app._id });
 
+  // Фокус-темы для пересдачи. Если передан fromInterviewId — берём
+  // проваленные темы той попытки (authoritative). Иначе — явный список.
+  let resolvedFocus = [];
+  if (isValidObjectId(fromInterviewId)) {
+    const prev = await Interview.findById(fromInterviewId)
+      .select("items application")
+      .lean();
+    if (prev && String(prev.application) === String(app._id)) {
+      resolvedFocus = [
+        ...new Set(
+          (prev.items || [])
+            .filter((it) => it.result && it.result !== "pass" && it.topic)
+            .map((it) => String(it.topic))
+        ),
+      ];
+    }
+  } else if (Array.isArray(focusTopics)) {
+    resolvedFocus = focusTopics.filter(isValidObjectId).map(String);
+  }
+
   const interview = await Interview.create({
     application: app._id,
     track: track || sphereToTrack(app.sphere),
@@ -105,6 +134,7 @@ exports.schedule = catchAsync(async (req, res, next) => {
     interviewer: isValidObjectId(interviewer) ? interviewer : app.mentor,
     attemptNumber: priorCount + 1,
     status: "scheduled",
+    focusTopics: resolvedFocus,
     createdBy: req.user.id || req.user._id,
   });
 

@@ -10,8 +10,8 @@ const Interview = require("../models/interviewModel");
 const Setting = require("../models/settingModel");
 const { sendMessage } = require("./telegramService");
 
-// Tashkent — стабильный UTC+5.
-const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
+// Ташкентский оффсет — единый источник в utils/tashkentTime.js.
+const { TASHKENT_OFFSET_MS } = require("../utils/tashkentTime");
 const tashkentDayBounds = (now = new Date()) => {
     const t = new Date(now.getTime() + TASHKENT_OFFSET_MS);
     t.setUTCHours(0, 0, 0, 0);

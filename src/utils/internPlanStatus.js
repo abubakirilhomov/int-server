@@ -1,44 +1,43 @@
 const Lesson = require("../models/lessonModel");
+const {
+  TASHKENT_OFFSET_MS,
+  startOfTashkentDay,
+  startOfTashkentMonth,
+  startOfNextTashkentMonth,
+  tashkentWeekday,
+} = require("./tashkentTime");
 
-const startOfDay = (date) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-const endOfDay = (date) => {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
-
-const getMonthBounds = (date = new Date()) => {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  return { start: startOfDay(start), end: endOfDay(end) };
-};
+// Полуоткрытые границы текущего ташкентского месяца: [start, endExclusive).
+// Интерны в UTC+5 — окно должно совпадать с их календарным месяцем, иначе
+// уроки у стыка месяца засчитываются не в тот месяц.
+const getMonthBounds = (date = new Date()) => ({
+  start: startOfTashkentMonth(date),
+  endExclusive: startOfNextTashkentMonth(date),
+});
 
 const getWeeklyTarget = (lessonsPerMonth = 24) =>
   Math.max(1, Math.ceil(Number(lessonsPerMonth) / 4));
 
-const isSunday = (date) => new Date(date).getDay() === 0;
-
+// Кол-во рабочих дней (не воскресений, по Ташкенту) в окне [from, to]
+// включительно с обоих концов — как в исходной логике, но в ташкентском
+// фрейме. Важно для requiredLessonsByNow, от которого зависит блокировка.
 const countWorkingDaysInclusive = (from, to) => {
-  const start = startOfDay(from);
-  const end = startOfDay(to);
-  if (start > end) return 0;
+  let cursor = startOfTashkentDay(from);
+  const end = startOfTashkentDay(to);
+  if (cursor > end) return 0;
 
   let count = 0;
-  const cursor = new Date(start);
   while (cursor <= end) {
-    if (!isSunday(cursor)) count += 1;
-    cursor.setDate(cursor.getDate() + 1);
+    if (tashkentWeekday(cursor) !== 0) count += 1;
+    cursor = new Date(cursor.getTime() + DAY_MS);
   }
   return count;
 };
 
 const getCompletedWeeksInMonth = (date = new Date()) => {
-  const dayOfMonth = date.getDate();
+  const dayOfMonth = new Date(date.getTime() + TASHKENT_OFFSET_MS).getUTCDate();
   const currentWeekIndex = Math.ceil(dayOfMonth / 7);
   return Math.max(0, currentWeekIndex - 1);
 };
@@ -97,8 +96,8 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     const enabledAt = intern.manualActivation.enabledAt;
     const stillValid =
       enabledAt &&
-      enabledAt.getMonth() === referenceDate.getMonth() &&
-      enabledAt.getFullYear() === referenceDate.getFullYear();
+      startOfTashkentMonth(new Date(enabledAt)).getTime() ===
+        startOfTashkentMonth(referenceDate).getTime();
 
     if (stillValid) {
       return {
@@ -115,12 +114,14 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     // Активация истекла (другой месяц) — продолжаем обычную проверку
   }
 
-  const { start, end } = getMonthBounds(referenceDate);
+  const { start, endExclusive } = getMonthBounds(referenceDate);
+  // Последний момент ташкентского месяца (inclusive) — для подсчёта рабочих дней.
+  const end = new Date(endExclusive.getTime() - 1);
   const completedWeeksInMonth = getCompletedWeeksInMonth(referenceDate);
   const weeklyTarget = getWeeklyTarget(intern.lessonsPerMonth);
 
   const startWorkDate = intern.probationStartDate || intern.dateJoined || intern.createdAt || start;
-  const effectiveStart = startWorkDate > start ? startOfDay(startWorkDate) : start;
+  const effectiveStart = startWorkDate > start ? startOfTashkentDay(startWorkDate) : start;
   const effectiveEnd = referenceDate < end ? referenceDate : end;
 
   const elapsedWorkingDays = countWorkingDaysInclusive(effectiveStart, effectiveEnd);
@@ -136,20 +137,20 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
 
   const confirmedLessonsCount = await Lesson.countDocuments({
     intern: intern._id,
-    date: { $gte: start, $lte: end },
+    date: { $gte: start, $lt: endExclusive },
     status: "confirmed",
   });
 
   const pendingLessonsCount = await Lesson.countDocuments({
     intern: intern._id,
-    date: { $gte: start, $lte: end },
+    date: { $gte: start, $lt: endExclusive },
     status: "pending",
   });
 
   const bonusLessonsCount = (intern.bonusLessons || [])
     .filter((bonus) => {
       const bonusDate = bonus?.date ? new Date(bonus.date) : null;
-      return bonusDate && bonusDate >= start && bonusDate <= end;
+      return bonusDate && bonusDate >= start && bonusDate < endExclusive;
     })
     .reduce((sum, bonus) => sum + (bonus.count || 0), 0);
 

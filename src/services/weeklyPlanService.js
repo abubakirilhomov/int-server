@@ -18,28 +18,12 @@ const Lesson = require("../models/lessonModel");
 const Subscription = require("../models/subscriptionModel");
 const webpush = require("web-push");
 
-// Tashkent — стабильный UTC+5, без DST.
-const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
-
-/**
- * Возвращает UTC-Date, соответствующий "00:00 Asia/Tashkent" для дня, в
- * который попадает входной момент (по таштенскому времени).
- */
-function startOfTashkentDay(d) {
-  const t = new Date(d.getTime() + TASHKENT_OFFSET_MS);
-  t.setUTCHours(0, 0, 0, 0);
-  return new Date(t.getTime() - TASHKENT_OFFSET_MS);
-}
-
-/**
- * UTC-Date соответствующий 1-му числу текущего месяца 00:00 Asia/Tashkent.
- * Нужен для счётчика "self-activations за календарный месяц".
- */
-function startOfTashkentMonth(d) {
-  const t = new Date(d.getTime() + TASHKENT_OFFSET_MS);
-  const utcMs = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1);
-  return new Date(utcMs - TASHKENT_OFFSET_MS);
-}
+// Ташкентские date-хелперы — единый источник в utils/tashkentTime.js.
+const {
+  TASHKENT_OFFSET_MS,
+  startOfTashkentDay,
+  startOfTashkentMonth,
+} = require("../utils/tashkentTime");
 
 /**
  * Окно для оценки. При запуске понедельник 00:30 Tashkent:

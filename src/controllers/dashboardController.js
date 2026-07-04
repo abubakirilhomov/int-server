@@ -4,6 +4,7 @@ const grades = require("../config/grades");
 const GradeConfig = require("../models/gradeConfigModel");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getWeeklyPlanView } = require("../services/weeklyPlanService");
+const { tashkentMonthBounds } = require("../utils/tashkentTime");
 
 const MAX_SCORE = 5;
 const PROMOTION_THRESHOLD = 50;
@@ -13,8 +14,9 @@ exports.getDashboardStats = async (req, res) => {
         const userId = req.user.id;
 
         const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        // Границы месяца по Asia/Tashkent (интерны в UTC+5), полуоткрытый
+        // интервал [startOfMonth, endOfMonth) — совпадает с $gte/$lt ниже.
+        const { start: startOfMonth, endExclusive: endOfMonth } = tashkentMonthBounds(now);
 
         // 1. Fetch User
         const user = await User.findById(userId).lean();
@@ -65,8 +67,8 @@ exports.getDashboardStats = async (req, res) => {
                 {
                     $group: {
                         _id: {
-                            year: { $year: "$date" },
-                            month: { $month: "$date" }
+                            year: { $year: { date: "$date", timezone: "Asia/Tashkent" } },
+                            month: { $month: { date: "$date", timezone: "Asia/Tashkent" } }
                         },
                         count: { $sum: 1 }
                     }

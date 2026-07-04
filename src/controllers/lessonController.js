@@ -11,6 +11,11 @@ const { awardXP, XP_REWARDS } = require("../services/xpService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const isAdminUser = require("../utils/isAdminUser");
+const {
+  tashkentWallClockToDate,
+  startOfTashkentDay,
+  startOfNextTashkentDay,
+} = require("../utils/tashkentTime");
 
 // Only lessons younger than this window force an intern to leave feedback.
 // Anything older is grandfathered: it still appears on the admin "stuck
@@ -79,17 +84,26 @@ exports.createLesson = catchAsync(async (req, res) => {
     }
   }
 
-  // Prevent duplicate lessons: same intern + mentor + date
-  if (payload.intern && payload.mentor && payload.date) {
-    const dayStart = new Date(payload.date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(payload.date);
-    dayEnd.setHours(23, 59, 59, 999);
+  // Урок датируется по выбранному интерном времени (`time` — ташкентское
+  // стенное время), а НЕ по моменту создания записи. Без этого срабатывал
+  // default модели `date: Date.now`, из-за чего уроки утекали в соседний
+  // месяц (особенно залогированные у полуночи / с бэкдейтом), а анти-дубль
+  // ниже (завязанный на payload.date) никогда не выполнялся.
+  const derivedDate = tashkentWallClockToDate(payload.time);
+  if (!derivedDate) {
+    return res.status(400).json({ message: "Неверный формат времени урока." });
+  }
+  payload.date = derivedDate;
+
+  // Prevent duplicate lessons: same intern + mentor + Tashkent-day
+  if (payload.intern && payload.mentor) {
+    const dayStart = startOfTashkentDay(payload.date);
+    const dayEnd = startOfNextTashkentDay(payload.date);
 
     const existing = await Lesson.findOne({
       intern: payload.intern,
       mentor: payload.mentor,
-      date: { $gte: dayStart, $lte: dayEnd },
+      date: { $gte: dayStart, $lt: dayEnd },
     });
 
     if (existing) {

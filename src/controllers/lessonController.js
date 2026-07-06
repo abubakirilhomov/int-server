@@ -11,11 +11,7 @@ const { awardXP, XP_REWARDS } = require("../services/xpService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const isAdminUser = require("../utils/isAdminUser");
-const {
-  tashkentWallClockToDate,
-  startOfTashkentDay,
-  startOfNextTashkentDay,
-} = require("../utils/tashkentTime");
+const { tashkentWallClockToDate } = require("../utils/tashkentTime");
 
 // Only lessons younger than this window force an intern to leave feedback.
 // Anything older is grandfathered: it still appears on the admin "stuck
@@ -95,20 +91,20 @@ exports.createLesson = catchAsync(async (req, res) => {
   }
   payload.date = derivedDate;
 
-  // Prevent duplicate lessons: same intern + mentor + Tashkent-day
+  // Ловим только ТОЧНЫЙ дубль (случайный двойной сабмит): тот же интерн +
+  // ментор + то же самое время урока. Дневную дедупликацию НЕ делаем — интерн
+  // может законно провести несколько занятий с одним ментором в день, иначе
+  // он физически не выполнит месячную норму (сеньору нужно ~80 уроков/мес).
   if (payload.intern && payload.mentor) {
-    const dayStart = startOfTashkentDay(payload.date);
-    const dayEnd = startOfNextTashkentDay(payload.date);
-
     const existing = await Lesson.findOne({
       intern: payload.intern,
       mentor: payload.mentor,
-      date: { $gte: dayStart, $lt: dayEnd },
+      date: payload.date,
     });
 
     if (existing) {
       return res.status(409).json({
-        message: "Урок с этим ментором на эту дату уже существует.",
+        message: "Урок с этим ментором на это время уже добавлен.",
       });
     }
   }

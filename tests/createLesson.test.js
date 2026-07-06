@@ -21,11 +21,7 @@ jest.mock("../src/services/xpService", () => ({
 const Intern = require("../src/models/internModel");
 const Lesson = require("../src/models/lessonModel");
 const { createLesson } = require("../src/controllers/lessonController");
-const {
-  startOfTashkentDay,
-  startOfNextTashkentDay,
-  tashkentWallClockToDate,
-} = require("../src/utils/tashkentTime");
+const { tashkentWallClockToDate } = require("../src/utils/tashkentTime");
 
 const makeRes = () => {
   const res = {};
@@ -68,9 +64,15 @@ describe("createLesson — date из time", () => {
     expect(Lesson.create).not.toHaveBeenCalled();
   });
 
-  test("ожившый анти-дубль использует ташкентское дневное окно и даёт 409", async () => {
+  test("точный дубль (тот же ментор+время) → 409, запрос по точному моменту", async () => {
+    const derived = tashkentWallClockToDate("2026-07-15T14:00");
     Lesson.findOne.mockImplementation((q) => {
-      if (q && q.date) return Promise.resolve({ _id: "dup" });
+      if (q && q.date) {
+        // дубль только при совпадении точного момента
+        return Promise.resolve(
+          q.date.getTime && q.date.getTime() === derived.getTime() ? { _id: "dup" } : null
+        );
+      }
       return { sort: () => ({ lean: () => Promise.resolve(null) }) };
     });
     const res = makeRes();
@@ -79,12 +81,31 @@ describe("createLesson — date из time", () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(Lesson.create).not.toHaveBeenCalled();
 
-    const derived = tashkentWallClockToDate("2026-07-15T14:00");
     const dedupeCall = Lesson.findOne.mock.calls
       .map((c) => c[0])
       .find((q) => q && q.date);
-    expect(dedupeCall.date.$gte.getTime()).toBe(startOfTashkentDay(derived).getTime());
-    expect(dedupeCall.date.$lt.getTime()).toBe(startOfNextTashkentDay(derived).getTime());
+    expect(dedupeCall.date instanceof Date).toBe(true); // точное равенство, без дневного диапазона
+    expect(dedupeCall.date.getTime()).toBe(derived.getTime());
+    expect(dedupeCall.date.$gte).toBeUndefined();
+    expect(dedupeCall.date.$lt).toBeUndefined();
+  });
+
+  test("другое время с тем же ментором в тот же день — разрешено (доходит до create)", async () => {
+    const existing = tashkentWallClockToDate("2026-07-15T10:00");
+    Lesson.findOne.mockImplementation((q) => {
+      if (q && q.date) {
+        return Promise.resolve(
+          q.date.getTime && q.date.getTime() === existing.getTime() ? { _id: "dup" } : null
+        );
+      }
+      return { sort: () => ({ lean: () => Promise.resolve(null) }) };
+    });
+    Lesson.create.mockResolvedValue({ _id: "new2", intern: null });
+    const res = makeRes();
+    await invoke(internReq("2026-07-15T15:00"), res); // другое время → не дубль
+
+    expect(Lesson.create).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 
   test("на успехе в Lesson.create уходит выведенный ташкентский date", async () => {

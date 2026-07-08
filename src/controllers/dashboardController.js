@@ -42,7 +42,8 @@ exports.getDashboardStats = async (req, res) => {
             monthLessonsData,
             trialLessonsData,
             monthlyHistoryData,
-            recentLessonsData
+            recentLessonsData,
+            confirmedAllTimeCount
         ] = await Promise.all([
             // A. Current Month — filter by lesson date (not createdAt)
             Lesson.find({
@@ -82,7 +83,12 @@ exports.getDashboardStats = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .limit(5)
                 .populate('mentor', 'name lastName') // Populate for potential usage (filtering later)
-                .lean()
+                .lean(),
+
+            // E. All-time confirmed (career) — показываем рядом с trial-нормой,
+            // чтобы падение trial-счётчика после повышения грейда (сброс
+            // probationStartDate) не читалось как «уроки пропали».
+            Lesson.countDocuments({ intern: userId, status: "confirmed" })
         ]);
 
         // --- Process Current Month ---
@@ -234,6 +240,7 @@ exports.getDashboardStats = async (req, res) => {
             lessonsThisMonth: lessonsConfirmed,
             lessonsConfirmed,
             lessonsPending,
+            confirmedAllTime: confirmedAllTimeCount,
             totalLessons,
             monthlyGoal,
             adjustedMonthlyGoal,

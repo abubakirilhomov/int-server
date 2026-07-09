@@ -17,6 +17,10 @@ const createInternSchema = Joi.object({
     }),
     phoneNumber: Joi.string().allow("").optional(),
     telegram: Joi.string().allow("").optional(),
+    age: Joi.number().integer().min(11).max(60).allow(null, "").optional().messages({
+        "number.min": "Возраст должен быть не меньше 11",
+        "number.max": "Возраст должен быть не больше 60",
+    }),
     sphere: Joi.string()
         .valid(
             "backend-nodejs",

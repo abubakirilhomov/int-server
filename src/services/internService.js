@@ -18,6 +18,7 @@ class InternService {
             password,
             phoneNumber,
             telegram,
+            age,
             sphere,
             profilePhoto,
             branch,
@@ -66,6 +67,7 @@ class InternService {
             password,
             phoneNumber: phoneNumber || "",
             telegram: telegram || "",
+            age: (age === "" || age === null || age === undefined) ? undefined : age,
             sphere: sphere || "backend-nodejs",
             profilePhoto: profilePhoto || "",
             branches: branchList.map((b) => ({
@@ -379,6 +381,7 @@ class InternService {
             "dateJoined",
             "phoneNumber",
             "telegram",
+            "age",
             "sphere",
             "profilePhoto",
         ];
@@ -389,6 +392,11 @@ class InternService {
                 payload[field] = updateData[field];
             }
         });
+
+        // Пустое значение возраста из формы → снять поле (не писать "" в Number).
+        if (payload.age === "" || payload.age === null) {
+            payload.age = undefined;
+        }
 
         if (payload.password !== undefined && !String(payload.password).trim()) {
             delete payload.password;

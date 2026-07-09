@@ -12,6 +12,9 @@ const internSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 8 },
   phoneNumber: { type: String, trim: true, default: "" },
   telegram: { type: String, trim: true, default: "" },
+  // Возраст из анкеты-заявки (или введённый админом вручную). Не required —
+  // у интернов, созданных не через анкету, может отсутствовать.
+  age: { type: Number, min: 11, max: 60 },
   sphere: {
     type: String,
     enum: [

@@ -363,6 +363,7 @@ exports.convert = catchAsync(async (req, res, next) => {
     password: tempPassword, // hashed by pre-save hook
     phoneNumber: app.phone,
     telegram: app.telegramUsername,
+    age: app.age,
     sphere: app.sphere,
     branches: [{ branch: app.branch, mentor: app.mentor, isHeadIntern: false, joinedAt: now }],
     grade: "junior",

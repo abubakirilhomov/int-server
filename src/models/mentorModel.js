@@ -8,7 +8,9 @@ const mentorSchema = new mongoose.Schema({
   branches: [{ type: mongoose.Schema.Types.ObjectId, ref: "Branch" }],
   role: {
     type: String,
-    enum: ['mentor', 'admin', 'branchManager'],
+    // administrator = ресепшен филиала: ведёт учёт жёлтых бейджиков (выдача/возврат/
+    // сверка), видит только свой филиал. Ортогонален учебной роли mentor.
+    enum: ['mentor', 'admin', 'branchManager', 'administrator'],
     default: 'mentor'
   },
   // Админ-доступ, ортогональный к `role`. Позволяет ментору оставаться

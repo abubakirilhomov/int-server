@@ -10,6 +10,10 @@ const branchSchema = new mongoose.Schema({
   },
   telegramLink: { type: String },
   branchManager: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentor', default: null },
+  // Сколько физических жёлтых бейджиков (sariq bejik) всего на ресепшене этого
+  // филиала. База для посуточной сверки: stock = на_руках + в_ящике. Заполняется
+  // разово инвентаризацией, дальше меняется только при добавлении/списании.
+  badgeStock: { type: Number, default: 0, min: 0 },
   interviews: {}
 }, { timestamps: true });
 

@@ -32,6 +32,7 @@
     "xss-clean": "^0.1.4"
   },
   "devDependencies": {
-    "jest": "^30.3.0"
+    "jest": "^30.3.0",
+    "mongodb-memory-server": "^11.2.0"
   }
 }

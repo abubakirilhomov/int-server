@@ -31,7 +31,7 @@ exports.createMentor = catchAsync(async (req, res) => {
     lastName,
     password: hashedPassword,
     branches: branchList,
-    role: ["mentor", "admin", "branchManager"].includes(role) ? role : "mentor",
+    role: ["mentor", "admin", "branchManager", "administrator"].includes(role) ? role : "mentor",
     isAdmin: isAdmin === true,
     profilePhoto: profilePhoto || "",
     telegramChatId: typeof telegramChatId === "string" ? telegramChatId.trim() : "",
@@ -71,7 +71,7 @@ exports.updateMentor = catchAsync(async (req, res) => {
   } else if (branch) {
     mentor.branches = [branch];
   }
-  if (role && ['mentor', 'admin', 'branchManager'].includes(role)) mentor.role = role;
+  if (role && ['mentor', 'admin', 'branchManager', 'administrator'].includes(role)) mentor.role = role;
   if (typeof isAdmin === "boolean") mentor.isAdmin = isAdmin;
   if (profilePhoto !== undefined) mentor.profilePhoto = profilePhoto;
   if (telegramChatId !== undefined) {

@@ -263,6 +263,20 @@ const internSchema = new mongoose.Schema({
       },
     ],
   },
+
+  // Физический жёлтый бейджик (sariq bejik) — вкладыш-пропуск интерна (пускает в
+  // комнату отдыха и на уроки, метка "я интерн"). Живёт на ресепшене филиала и
+  // выдаётся/сдаётся посуточно администратором. НЕ путать с gamification-полем
+  // `badges` выше (цифровые ачивки). hasBadge — живое состояние (сейчас на руках);
+  // полная история выдач/возвратов/потерь — в модели BadgeEvent, посуточная сверка
+  // с ящиком — в BadgeReconciliation. branch фиксирует, на каком ресепшене открыт
+  // заём (для сверки по филиалу у мульти-филиальных интернов).
+  receptionBadge: {
+    hasBadge: { type: Boolean, default: false, index: true },
+    since: { type: Date, default: null },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", default: null },
+    givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },
+  },
 });
 
 // Virtuals for backward compatibility

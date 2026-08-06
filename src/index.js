@@ -125,6 +125,7 @@ app.use("/api/branches", branchRoutes);
 app.use("/api/lessons", lessonsRoutes);
 app.use("/api/rules", rulesRoutes);
 app.use("/api/violations", require("./routes/violationRoutes"));
+app.use("/api/complaints", require("./routes/complaintRoutes"));
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/uploads", require("./routes/uploadRoutes"));

@@ -775,6 +775,10 @@ class InternService {
                     ruleId,
                     date: new Date(),
                     notes: feedback ? `При оценке урока. Комментарий: ${feedback}` : "При оценке урока",
+                    // Без issuedById отчёт по нарушениям (violationController,
+                    // $lookup по violations.issuedById) не может показать автора.
+                    issuedBy: "mentor",
+                    issuedById: mentorId,
                 });
             });
         }

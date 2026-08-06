@@ -291,21 +291,29 @@ internSchema.virtual("isHeadIntern").get(function () {
 });
 
 // Instance methods
+// `branches.branch` может быть как ObjectId, так и populate-нутым документом
+// Branch. У mongoose-документа toString() возвращает inspect-строку, а не hex
+// id, поэтому прямое сравнение через .toString() ломалось на populate-нутых
+// доках (жалобы branch manager всегда падали в 403). Сравниваем по _id.
+const branchIdOf = (entry) => entry?.branch?._id || entry?.branch || null;
+
+const sameBranch = (entry, branchId) => {
+  const id = branchIdOf(entry);
+  return Boolean(id) && String(id) === String(branchId);
+};
+
 internSchema.methods.getMentorForBranch = function (branchId) {
-  return (
-    this.branches.find((b) => b.branch.toString() === branchId.toString())
-      ?.mentor || null
-  );
+  if (!branchId) return null;
+  return this.branches.find((b) => sameBranch(b, branchId))?.mentor || null;
 };
 internSchema.methods.isInBranch = function (branchId) {
-  return this.branches.some(
-    (b) => b.branch.toString() === branchId.toString()
-  );
+  if (!branchId) return false;
+  return this.branches.some((b) => sameBranch(b, branchId));
 };
 internSchema.methods.isHeadInternAt = function (branchId) {
+  if (!branchId) return false;
   return (
-    this.branches.find((b) => b.branch.toString() === branchId.toString())
-      ?.isHeadIntern || false
+    this.branches.find((b) => sameBranch(b, branchId))?.isHeadIntern || false
   );
 };
 

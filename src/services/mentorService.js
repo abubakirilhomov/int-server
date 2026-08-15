@@ -1,3 +1,7 @@
+
+
+
+
 const Mentor = require("../models/mentorModel");
 const Lesson = require("../models/lessonModel");
 const Intern = require("../models/internModel");
@@ -29,7 +33,8 @@ const countWorkingDaysInclusive = (from, to) => {
 const computeActivity = ({ lessonList, monthlyNorm, totalWorkingDays }) => {
     const confirmed = lessonList.filter((l) => l.status === "confirmed").length;
     const total = lessonList.length;
-    const norm = Math.max(Number(monthlyNorm) || 24, 1);
+    const rawNorm = monthlyNorm === 0 ? 0 : Number(monthlyNorm) || 24;
+    const norm = Math.max(rawNorm, monthlyNorm === 0 ? 0 : 1);
 
     const planCompletion = Math.min(confirmed / norm, 1);
     const feedbackRate = total > 0 ? confirmed / total : 0;
@@ -216,7 +221,7 @@ class MentorService {
             const list = lessonsByIntern[String(intern._id)] || [];
             internActivity[String(intern._id)] = computeActivity({
                 lessonList: list,
-                monthlyNorm: intern.lessonsPerMonth,
+                monthlyNorm: intern.grade === "senior" ? 0 : intern.lessonsPerMonth,
                 totalWorkingDays,
             });
         }
@@ -324,7 +329,7 @@ class MentorService {
             const list = lessonsByIntern[String(intern._id)] || [];
             const activity = computeActivity({
                 lessonList: list,
-                monthlyNorm: intern.lessonsPerMonth,
+                monthlyNorm: intern.grade === "senior" ? 0 : intern.lessonsPerMonth,
                 totalWorkingDays,
             });
             const lastLessonDate = list.length > 0

@@ -82,6 +82,8 @@ const internSchema = new mongoose.Schema({
     icon: { type: String },
     earnedAt: { type: Date, default: Date.now },
     category: { type: String, enum: ["lessons", "streak", "quality", "grade", "special"] },
+    // Badge qiyinligi (1-10) — reyting va XP hisobida ishlatiladi.
+    points: { type: Number, default: 1 },
   }],
   currentStreak: { type: Number, default: 0 },
   longestStreak: { type: Number, default: 0 },
@@ -277,6 +279,19 @@ const internSchema = new mongoose.Schema({
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", default: null },
     givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },
   },
+  // Head intern oddiy izohlari (shtraf emas)
+  comments: [
+    {
+      text: { type: String, required: true, trim: true },
+      createdAt: { type: Date, default: Date.now },
+      createdById: { type: mongoose.Schema.Types.ObjectId, ref: "Intern" },
+      createdByName: { type: String, trim: true, default: "" },
+      branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" },
+    },
+  ],
+  // Shtraf hisoblagichi (violation bug fix)
+  violationsCount: { type: Number, default: 0 },
+  lastViolationAt: { type: Date, default: null },
 });
 
 // Virtuals for backward compatibility

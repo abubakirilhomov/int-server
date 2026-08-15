@@ -28,14 +28,16 @@ const grades = {
     ]
   },
   senior: {
-    lessonsPerMonth: 80,
+    lessonsPerMonth: 0,
     trialPeriod: 3,
+    requiresLessons: false,
     plus: [
       "Qolgan darslarga kirish imkoniyati",
       "Oshxonadan foydalanish imkoniyat",
       "Dam olish xonasidan foydalanish imkoniyati",
       "MARS xodimlari uchun treninglarda qatnashish",
-      "Academy event-tambuildinglarda qatnashish"
+      "Academy event-tambuildinglarda qatnashish",
+      "Tutor bilan ishlash rejimi"
     ]
   }
 };

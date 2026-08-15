@@ -20,11 +20,20 @@ async function getInternStats(internId) {
   const lessonsPerMonth = intern?.lessonsPerMonth || 24;
   const planCompletion = lessonsPerMonth > 0 ? monthlyLessons / lessonsPerMonth : 0;
 
+  // Rank (score bo'yicha) — top_3 badge uchun. Buzilgan edi (doim 0), shuning
+  // uchun reytingdagi o'rinni score bo'yicha sanaymiz.
+  const rank = intern
+    ? (await Intern.countDocuments({
+        status: { $nin: ["frozen", "archived"] },
+        score: { $gt: intern.score || 0 },
+      })) + 1
+    : 0;
+
   return {
     totalLessons,
     monthlyLessons,
     planCompletion,
-    rank: 0,
+    rank,
   };
 }
 
@@ -53,6 +62,7 @@ async function checkAndAwardBadges(internId) {
         name: def.name.ru,
         icon: def.icon,
         category: def.category,
+        points: def.points || 1,
         earnedAt: new Date(),
       };
       intern.badges.push(badge);
@@ -61,8 +71,10 @@ async function checkAndAwardBadges(internId) {
   }
 
   if (newBadges.length > 0) {
-    // Award XP for badges
-    intern.xp = (intern.xp || 0) + newBadges.length * 20;
+    // XP badge qiyinligiga (points) mutanosib beriladi — oddiy va og'ir
+    // yutuqlar endi bir xil vazn bermaydi.
+    const earnedPoints = newBadges.reduce((sum, b) => sum + (b.points || 1), 0);
+    intern.xp = (intern.xp || 0) + earnedPoints * 10;
     intern.level = Math.floor(Math.sqrt((intern.xp || 0) / 100)) + 1;
     await intern.save();
   }
@@ -80,7 +92,9 @@ async function getAllBadgeStatuses(internId) {
     key: def.key,
     name: def.name,
     icon: def.icon,
+    description: def.description,
     category: def.category,
+    points: def.points || 1,
     earned: earnedKeys.has(def.key),
     earnedAt: (intern.badges || []).find((b) => b.key === def.key)?.earnedAt || null,
   }));

@@ -273,6 +273,12 @@ exports.getInternProfile = catchAsync(async (req, res) => {
   res.json(profile);
 });
 
+// Public profil — reyting sahifasidan boshqa internlarni ko'rish (PII siz).
+exports.getPublicProfile = catchAsync(async (req, res) => {
+  const profile = await internService.getPublicProfile(req.params.id);
+  res.json(profile);
+});
+
 // Получение стажёров по филиалу (из JWT)
 exports.getInterns = catchAsync(async (req, res) => {
   const interns = await internService.getInterns(req.user);
@@ -422,6 +428,73 @@ exports.headInternWarning = catchAsync(async (req, res, next) => {
     { ruleId, notes }
   );
   res.json(result);
+});
+
+// ─── Head intern: oddiy izoh qo'shish (shtraf emas) ─────────────────────────
+exports.addComment = catchAsync(async (req, res, next) => {
+  const { text } = req.body;
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return next(new AppError("Izoh matni kiritilishi shart", 400));
+  }
+
+  const commenter = req.user?.id || req.user?._id;
+  const commenterInfo = await Intern.findById(commenter).select("name lastName branches");
+  if (!commenterInfo) return next(new AppError("Foydalanuvchi topilmadi", 404));
+
+  // Head intern tekshiruvi
+  if (!commenterInfo.branches.some((b) => b.isHeadIntern)) {
+    return next(new AppError("Faqat Head Intern izoh qoldira oladi", 403));
+  }
+
+  const targetIntern = await Intern.findById(req.params.id);
+  if (!targetIntern) return next(new AppError("Intern topilmadi", 404));
+
+  // Head intern o'z filialiga tegishli internlarga izoh qoldira oladi
+  const headBranchIds = commenterInfo.branches
+    .filter((b) => b.isHeadIntern)
+    .map((b) => String(b.branch?._id || b.branch));
+  const isInBranch = targetIntern.branches.some(
+    (b) => headBranchIds.includes(String(b.branch?._id || b.branch))
+  );
+  if (!isInBranch) {
+    return next(new AppError("Faqat o'z filialingizdagi internlarga izoh qoldira olasiz", 403));
+  }
+
+  targetIntern.comments.push({
+    text: text.trim(),
+    createdById: commenter,
+    createdByName: `${commenterInfo.name} ${commenterInfo.lastName || ""}`.trim(),
+    branchId: headBranchIds[0],
+  });
+  await targetIntern.save();
+
+  const savedComment = targetIntern.comments[targetIntern.comments.length - 1];
+  res.status(201).json({ comment: savedComment });
+});
+
+// ─── Head intern: izohlar ro'yxatini olish ──────────────────────────────────
+exports.getComments = catchAsync(async (req, res, next) => {
+  const targetIntern = await Intern.findById(req.params.id)
+    .select("comments name lastName")
+    .lean();
+  if (!targetIntern) return next(new AppError("Intern topilmadi", 404));
+  res.json({ comments: targetIntern.comments || [] });
+});
+
+// ─── Head intern: izohni o'chirish ──────────────────────────────────────────
+exports.deleteComment = catchAsync(async (req, res, next) => {
+  const { id, commentId } = req.params;
+  const targetIntern = await Intern.findById(id);
+  if (!targetIntern) return next(new AppError("Intern topilmadi", 404));
+
+  const commentIdx = targetIntern.comments.findIndex(
+    (c) => String(c._id) === String(commentId)
+  );
+  if (commentIdx === -1) return next(new AppError("Izoh topilmadi", 404));
+
+  targetIntern.comments.splice(commentIdx, 1);
+  await targetIntern.save();
+  res.json({ success: true });
 });
 
 exports.getBranchManagerInterns = catchAsync(async (req, res) => {

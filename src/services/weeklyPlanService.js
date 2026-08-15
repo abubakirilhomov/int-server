@@ -87,7 +87,9 @@ async function evaluateWeeklyPlans({
   const details = [];
 
   for (const intern of interns) {
-    const target = Math.ceil((intern.lessonsPerMonth || 0) / 4);
+    // Senior internlar darslarga kirmaydi — ular uchun weekly plan nol bo'ladi.
+    const seniorTarget = intern.grade === "senior" ? 0 : intern.lessonsPerMonth || 0;
+    const target = Math.ceil(seniorTarget / 4);
 
     const confirmed = await Lesson.countDocuments({
       intern: intern._id,
@@ -243,7 +245,9 @@ async function notifyWeeklyTransition(intern, fromStatus, toStatus, target, tota
  */
 async function getWeeklyPlanView(intern, now = new Date()) {
   const wp = intern.weeklyPlan || {};
-  const target = Math.ceil((intern.lessonsPerMonth || 0) / 4);
+  // Senior internlar darslarga kirmaydi — weekly target 0 bo'ladi.
+  const seniorTarget = intern.grade === "senior" ? 0 : intern.lessonsPerMonth || 0;
+  const target = Math.ceil(seniorTarget / 4);
   const monthStart = startOfTashkentMonth(now);
 
   // Границы текущей недели (от понедельника 00:00 Tashkent текущей недели).

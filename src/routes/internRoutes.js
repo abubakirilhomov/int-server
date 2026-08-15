@@ -33,6 +33,7 @@ router.post("/inactivity-digest/run", auth, isAdmin, internCtrl.runInactivityDig
 router.get("/me", auth, internCtrl.getInternProfile); // own profile — must be before /:id
 router.get("/me/weekly-plan", auth, internCtrl.getMyWeeklyPlan);
 router.post("/me/self-activate", auth, internCtrl.selfActivateWeeklyPlan);
+router.get("/:id/public", auth, internCtrl.getPublicProfile); // reytingdan profil ko'rish
 router.get('/', auth, resolveActiveBranch, internCtrl.getInterns); // доступен и админу, и ментору
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
@@ -50,6 +51,9 @@ router.patch("/:id/archive", auth, isAdmin, internCtrl.archiveIntern);
 router.patch("/:id/unarchive", auth, isAdmin, internCtrl.unarchiveIntern);
 router.post("/:id/reset-password", auth, isAdmin, internCtrl.resetPassword);
 router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
+router.post("/:id/comments", auth, isHeadIntern, internCtrl.addComment);
+router.get("/:id/comments", auth, internCtrl.getComments);
+router.delete("/:id/comments/:commentId", auth, isHeadIntern, internCtrl.deleteComment);
 router.post("/:id/complaints", auth, resolveActiveBranch, internCtrl.addBranchManagerComplaint);
 
 module.exports = router;

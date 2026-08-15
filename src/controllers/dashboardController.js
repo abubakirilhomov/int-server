@@ -1,10 +1,12 @@
 const Lesson = require("../models/lessonModel");
 const User = require("../models/internModel");
+const Rule = require("../models/rulesModel");
 const grades = require("../config/grades");
 const GradeConfig = require("../models/gradeConfigModel");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getWeeklyPlanView } = require("../services/weeklyPlanService");
 const { tashkentMonthBounds } = require("../utils/tashkentTime");
+const { computePenalties, buildRuleMap } = require("../utils/penaltyUtils");
 
 const MAX_SCORE = 5;
 const PROMOTION_THRESHOLD = 50;
@@ -18,8 +20,10 @@ exports.getDashboardStats = async (req, res) => {
         // интервал [startOfMonth, endOfMonth) — совпадает с $gte/$lt ниже.
         const { start: startOfMonth, endExclusive: endOfMonth } = tashkentMonthBounds(now);
 
-        // 1. Fetch User
-        const user = await User.findById(userId).lean();
+        // 1. Fetch User — populate violations with rule details for penalty display
+        const user = await User.findById(userId)
+            .populate("violations.ruleId", "category title consequence")
+            .lean();
         if (!user) {
             return res.status(404).json({ message: "Пользователь не найден" });
         }
@@ -130,7 +134,12 @@ exports.getDashboardStats = async (req, res) => {
         }, 0);
         const trialLessonsConfirmed = trialLessonsConfirmedRaw + trialBonusLessons;
 
-        const trialTotalGoal = gradeConfig.lessonsPerMonth * gradeConfig.trialPeriod;
+        // Senior internlar darslarga kirmaydi — reja darslar soni doim 0 bo'ladi.
+        // EAMS / boshqaruv panelida senior uchun "reja darslar soni 0" ko'rinishi kerak.
+        const isSeniorPlanZero = gradeKey === "senior";
+        const effectiveLessonsPerMonth = isSeniorPlanZero ? 0 : gradeConfig.lessonsPerMonth;
+
+        const trialTotalGoal = effectiveLessonsPerMonth * gradeConfig.trialPeriod;
 
         // Days Calculations
         const daysWorking = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
@@ -138,7 +147,8 @@ exports.getDashboardStats = async (req, res) => {
         const daysRemaining = Math.max(trialPeriodDays - daysWorking, 0);
 
         // Monthly goal for the plan-blocking widget (stays per-month).
-        const monthlyGoal = gradeConfig.lessonsPerMonth;
+        // Senior uchun monthlyGoal ham 0 — reja darslar soni 0 ko'rinadi.
+        const monthlyGoal = effectiveLessonsPerMonth;
 
         // Trial-based goal = full probation target (used for progress % and concession check).
         const adjustedMonthlyGoal = trialTotalGoal;
@@ -234,6 +244,19 @@ exports.getDashboardStats = async (req, res) => {
 
         const autoPromotionEligible = overallProgress >= PROMOTION_THRESHOLD && probation?.isExpired === true;
 
+        // 🔹 Shtraf ma'lumotlari: dashboard-da ko'rsatish uchun
+        const allRules = await Rule.find({}).select("category").lean();
+        const ruleMap = buildRuleMap(allRules);
+        const penaltyInfo = computePenalties(user.violations || [], ruleMap);
+
+        // 🔹 Yutuqlar: dashboard yuklanganda tekshirib, yangi ochilganlarni
+        // qaytaramiz (frontend chiroqli notification ko'rsatadi).
+        let newBadges = [];
+        try {
+            const { checkAndAwardBadges } = require("../services/badgeService");
+            const result = await checkAndAwardBadges(userId);
+            newBadges = result?.newBadges || [];
+        } catch { /* badge tekshiruvi reyting/dashboardni to'smasin */ }
 
         return res.json({
             grade: gradeKey,
@@ -260,6 +283,7 @@ exports.getDashboardStats = async (req, res) => {
             // trialStats — прогресс испытательного срока от probationStartDate.
             // totalLessons = confirmed + bonus с даты повышения/вступления.
             // targetLessons = lessonsPerMonth × trialPeriod (полная цель за срок).
+            // Senior uchun targetLessons 0 — reja darslar soni ko'rinmaydi.
             trialStats: {
                 totalLessons: trialLessonsConfirmed,
                 targetLessons: trialTotalGoal,
@@ -289,6 +313,12 @@ exports.getDashboardStats = async (req, res) => {
             badges: user.badges || [],
             xp: user.xp || 0,
             level: user.level || 1,
+            // 🔹 Shtraf: violations ro'yxati + penaltyInfo
+            violations: user.violations || [],
+            violationsCount: user.violationsCount || 0,
+            lastViolationAt: user.lastViolationAt || null,
+            penaltyInfo,
+            newBadges,
         });
 
     } catch (err) {

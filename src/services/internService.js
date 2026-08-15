@@ -8,6 +8,39 @@ const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const isAdminUser = require("../utils/isAdminUser");
+const { computePenalties, buildRuleMap, PENALTY_WEIGHTS, demoteGrade } = require("../utils/penaltyUtils");
+const BADGE_DEFINITIONS = require("../config/badges");
+
+const BADGE_POINTS_BY_KEY = BADGE_DEFINITIONS.reduce((map, def) => {
+    map[def.key] = def.points || 1;
+    return map;
+}, {});
+
+// Reytingdagi badge bonusi shu qiymatga yetganda to'liq (100%) hisoblanadi.
+// Faqat oddiy badge'larni yig'ish bilan emas, qiyin/mas'uliyatli
+// yutuqlarni (masalan: senior, perfect_score, top_3) olish bilan tezroq to'ladi.
+const BADGE_BONUS_CAP = 80;
+
+// Shtraf berilganda intern darajasiga va reytingiga ta'sir qiladi.
+// category: green | yellow | red | black. Qaytarilgan demoted — daraja
+// pasaygan bo'lsa { from, to }, aks holda null.
+function applyViolationPenalty(intern, category) {
+  intern.violationsCount = (intern.violationsCount || 0) + 1;
+  intern.lastViolationAt = new Date();
+
+  // intern.score'ni shu yerda kamaytirmaymiz — u navbatdagi feedback kelganda
+  // baribir totalStars/feedbacks.length bilan qayta yoziladi (qarang: pastda
+  // "Пересчитываем общий балл"), ya'ni bu ayirish vaqtinchalik va beqaror
+  // edi. Jarima reytingga penaltyInfo.totalDeduction orqali bir marta va
+  // barqaror qo'llaniladi (getRatings() va boshqa reyting funksiyalarida).
+  const weight = PENALTY_WEIGHTS[category] || 0;
+
+  const demoteSteps = category === "red" ? 1 : category === "black" ? 1 : 0;
+  const demoted = demoteGrade(intern.grade, demoteSteps);
+  if (demoted) intern.grade = demoted.to;
+
+  return { weight, demoted };
+}
 
 class InternService {
     async createIntern(data) {
@@ -124,6 +157,10 @@ class InternService {
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name");
 
+        // Fetch all rules once to build a ruleId → category map for penalty computation.
+        const allRules = await Rule.find({}).select("category").lean();
+        const ruleMap = buildRuleMap(allRules);
+
         const internRatings = interns.map((intern) => {
             const feedbacks = intern.feedbacks || [];
             const lessonsVisited = intern.lessonsVisited || [];
@@ -143,20 +180,51 @@ class InternService {
             // activityRate uses only real lessons (visitedCount) as denominator
             // because bonus lessons don't generate mentor feedbacks by design
             const activityRate = Math.min(feedbackCount / Math.max(visitedCount, 1), 1);
+            // Repodagi kabi cheklanmagan — juda ko'p dars kirgan intern uchun
+            // bu qism 1 dan oshishi mumkin (masalan 500+ darsda ~1.8), reyting
+            // shu sababli 5 dan yuqori chiqishi repo bilan bir xil kutilgan holat.
             const attendanceFactor = Math.log(lessonCount + 1) / Math.log(30 + 1);
 
             // Сравниваем с целью за весь пробационный период (lessonsPerMonth × trialPeriod),
             // а не за один месяц — иначе любой интерн с 24+ уроками мгновенно получает 100%.
             const gradeConfig = grades[intern.grade];
             const trialPeriod = gradeConfig?.trialPeriod || 1;
-            const trialTarget = (intern.lessonsPerMonth || 24) * trialPeriod;
-            const planCompletion = Math.min(lessonCount / trialTarget, 1);
+            // Senior (requiresLessons: false) darslarga kirish talabi yo'q — tutor
+            // rejimida ishlaydi, shuning uchun reja bajarilishi doim 100% hisoblanadi.
+            // Aks holda gradeConfig.lessonsPerMonth=0 bo'lgani uchun
+            // `intern.lessonsPerMonth || 24` falsy-fallback tufayli 24 ga tushib,
+            // senior real darslar soni bo'yicha kunma-kun sekin to'lib borar edi —
+            // ular esa umuman dars kirishga majbur emas.
+            const planCompletion = gradeConfig?.requiresLessons === false
+                ? 1
+                : Math.min(lessonCount / ((intern.lessonsPerMonth || 24) * trialPeriod), 1);
 
+            // Kolleksiyalar (profildagi unvonlar/badge'lar) reytingga ta'sir qiladi —
+            // oddiy badge emas, aynan qiyin/mas'uliyatli badge'lar (senior, perfect_score,
+            // top_3 va h.k.) ko'proq og'irlik beradi. BADGE_BONUS_CAP ballga yetganda
+            // bonus 100% ga to'ladi.
+            const badgePoints = (intern.badges || []).reduce(
+                (sum, b) => sum + (b.points || BADGE_POINTS_BY_KEY[b.key] || 1),
+                0
+            );
+            const badgeFactor = Math.min(badgePoints / BADGE_BONUS_CAP, 1);
+
+            // Asosiy formula repodagi (GitHub main) bilan bir xil: stars 50%,
+            // activity 20%, plan 20%, attendance 10% — hech qanday sun'iy 5
+            // balllik yuqori chegara yo'q (repoda ham yo'q). Badge bonusi bu
+            // ulushlardan birortasini kamaytirmaydi — ustiga qo'shiladigan
+            // alohida, kichik bonus (maks. +0.25).
             const ratingScore =
                 averageStars * 0.5 +
                 activityRate * 5 * 0.2 +
                 planCompletion * 5 * 0.2 +
-                attendanceFactor * 5 * 0.1;
+                attendanceFactor * 5 * 0.1 +
+                badgeFactor * 0.25;
+
+            // 🔹 Shtrafga ta'sir: har bir categoriyaga qarab reytingdan ayirish.
+            const penaltyInfo = computePenalties(intern.violations || [], ruleMap);
+
+            const adjustedRatingScore = Math.max(0, ratingScore - penaltyInfo.totalDeduction);
 
             // Distinct branch names — used so a multi-branch intern is counted
             // once per branch in the branch leaderboard below, instead of being
@@ -181,7 +249,17 @@ class InternService {
                 planCompletion: +(planCompletion * 100).toFixed(1),
                 lessons: lessonCount,
                 feedbacks: feedbackCount,
-                ratingScore: +ratingScore.toFixed(2),
+                ratingScore: +adjustedRatingScore.toFixed(2),
+                // 🔹 Shtraf ma'lumotlari: kategoriya bo'yicha sonlar, jami
+                // ayirish, eng yomon darajasi (profil/sahifa uchun).
+                penaltyInfo,
+                // 🔹 Premium/VIP belgilari + yutuqlar (reyting sahifasi uchun)
+                isHeadIntern: (intern.branches || []).some((b) => b.isHeadIntern),
+                isSenior: intern.grade === "senior",
+                badgeCount: (intern.badges || []).length,
+                badgePoints,
+                badgeFactor: +(badgeFactor * 100).toFixed(1),
+                username: intern.username,
             };
         });
 
@@ -234,7 +312,8 @@ class InternService {
             intern = await Intern.findById(id)
                 .select("-password")
                 .populate("branches.branch", "name telegramLink")
-                .populate("branches.mentor", "name lastName");
+                .populate("branches.mentor", "name lastName")
+                .populate("violations.ruleId", "category title consequence");
         } else {
             const internId = user?._id || id;
             if (!internId) {
@@ -244,7 +323,8 @@ class InternService {
             intern = await Intern.findById(internId)
                 .select("-password")
                 .populate("branches.branch", "name telegramLink")
-                .populate("branches.mentor", "name lastName");
+                .populate("branches.mentor", "name lastName")
+                .populate("violations.ruleId", "category title consequence");
         }
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
@@ -285,6 +365,16 @@ class InternService {
                 return rest;
             }) || [];
 
+        // 🔹 Shtraf ma'lumotlari: violations ro'yxati + penaltyInfo
+        const safeViolations = (intern.violations || []).map((v) => {
+            const obj = v.toObject ? v.toObject() : v;
+            return {
+                ...obj,
+                rule: obj.ruleId || null,
+            };
+        });
+        const penaltyInfo = computePenalties(intern.violations || [], {});
+
         return {
             _id: intern._id,
             name: intern.name,
@@ -320,7 +410,49 @@ class InternService {
             createdAtLocal, // Ташкент
             grades,
             complaints: intern.complaints || [],
+            // 🔹 Shtraf: violations ro'yxati + penaltyInfo (eng yomon daraja, sonlar)
+            violations: safeViolations,
+            violationsCount: intern.violationsCount || 0,
+            lastViolationAt: intern.lastViolationAt || null,
+            penaltyInfo,
             planStatus: await getInternPlanStatus(intern),
+        };
+    }
+
+    // Reyting sahifasidan boshqa internning profilini ko'rish (PII siz).
+    // Profil rasmi, ism, daraja, head-intern/premium belgilari, yutuqlar
+    // (badges) va kirgan darslar soni ko'rsatiladi.
+    async getPublicProfile(internId) {
+        const intern = await Intern.findById(internId)
+            .select("-password -phoneNumber -telegram -feedbacks -violations -complaints")
+            .lean();
+        if (!intern) throw new AppError("Стажёр не найден", 404);
+
+        const visitedCount = (intern.lessonsVisited || []).reduce(
+            (sum, l) => sum + (l.count || 0),
+            0
+        );
+        const bonusCount = (intern.bonusLessons || []).reduce(
+            (sum, b) => sum + (b.count || 0),
+            0
+        );
+
+        return {
+            _id: intern._id,
+            name: intern.name,
+            lastName: intern.lastName,
+            username: intern.username,
+            profilePhoto: intern.profilePhoto || "",
+            grade: intern.grade,
+            sphere: intern.sphere || "",
+            isHeadIntern: (intern.branches || []).some((b) => b.isHeadIntern),
+            isSenior: intern.grade === "senior",
+            badges: intern.badges || [],
+            badgeCount: (intern.badges || []).length,
+            totalLessons: visitedCount + bonusCount,
+            helpedStudents: intern.helpedStudents || 0,
+            pluses: intern.pluses || [],
+            status: intern.status || "active",
         };
     }
 
@@ -532,12 +664,17 @@ class InternService {
             : category || "other";
 
         rules.forEach((rule) => {
+            const { demoted } = applyViolationPenalty(intern, rule.category);
+
             intern.violations.push({
                 ruleId: rule._id,
                 date: new Date(),
                 notes: text || `Жалоба от branch manager: ${rule.title}`,
                 issuedBy: isAdminUser(user) ? "admin" : "branchManager",
                 issuedById: user.id || user._id,
+                consequenceApplied: demoted
+                    ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
+                    : `Reyting ta'siri: -${PENALTY_WEIGHTS[rule.category] || 0}`,
             });
         });
 
@@ -770,7 +907,16 @@ class InternService {
 
         // 🆕 Добавляем нарушения (если есть)
         if (violations && violations.length > 0) {
-            violations.forEach((ruleId) => {
+            const rules = await Rule.find({ _id: { $in: violations } })
+                .select("category title")
+                .lean();
+            const ruleById = new Map(rules.map((r) => [String(r._id), r]));
+
+            for (const ruleId of violations) {
+                const rule = ruleById.get(String(ruleId)) || {};
+                const category = rule.category || "yellow";
+                const { demoted } = applyViolationPenalty(intern, category);
+
                 intern.violations.push({
                     ruleId,
                     date: new Date(),
@@ -779,8 +925,11 @@ class InternService {
                     // $lookup по violations.issuedById) не может показать автора.
                     issuedBy: "mentor",
                     issuedById: mentorId,
+                    consequenceApplied: demoted
+                        ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
+                        : `Reyting ta'siri: -${PENALTY_WEIGHTS[category] || 0}`,
                 });
-            });
+            }
         }
 
         // Пересчитываем общий балл (среднее арифметическое)
@@ -794,15 +943,16 @@ class InternService {
         lesson.status = "confirmed";
         await lesson.save();
 
-        // XP bonus for 5-star + check badges (fire-and-forget)
+        // XP bonus for 5-star + check badges
         const { checkAndAwardBadges } = require("./badgeService");
         const { awardXP, XP_REWARDS } = require("./xpService");
         if (stars === 5) awardXP(intern._id, XP_REWARDS.fiveStarFeedback).catch(() => {});
-        checkAndAwardBadges(intern._id).catch(() => {});
+        const { newBadges } = await checkAndAwardBadges(intern._id);
 
         return {
             message: "Стажёр успешно оценён",
             score: intern.score.toFixed(1),
+            newBadges,
         };
     }
 
@@ -1080,19 +1230,45 @@ class InternService {
             throw new AppError("Нельзя выдать предупреждение самому себе", 400);
         }
 
+        const rule = await Rule.findById(ruleId).select("category title").lean();
+        const category = rule?.category || "yellow";
+
+        // ─── Violation bug fix: shtraf berilganda o'zgarish bo'lishi ───
+        // 1. Hisoblagich, lastViolationAt, score va turiga qarab daraja
+        //    pasaytirish (sariq → yo'q, qizil → -1, qora → -2).
+        const { demoted } = applyViolationPenalty(targetIntern, category);
+
         targetIntern.violations.push({
             ruleId,
             date: new Date(),
             notes: notes || "",
             issuedBy: "headIntern",
             issuedById: headInternId,
+            consequenceApplied: demoted
+                ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
+                : `Reyting ta'siri: -${PENALTY_WEIGHTS[category] || 0}`,
         });
+
+        // 2. 3+ shtraf bo'lsa weekly plan restricted
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        const monthViolations = targetIntern.violations.filter(
+            (v) => new Date(v.date) >= monthStart
+        ).length;
+        if (monthViolations >= 3) {
+            targetIntern.weeklyPlan.status = "restricted";
+            targetIntern.weeklyPlan.restrictedSince = new Date();
+        }
 
         await targetIntern.save();
 
         return {
             message: `Предупреждение выдано стажёру ${targetIntern.name} ${targetIntern.lastName}`,
             intern: targetIntern,
+            violationsCount: targetIntern.violationsCount,
+            score: targetIntern.score,
+            demoted,
         };
     }
 
@@ -1101,6 +1277,10 @@ class InternService {
         const interns = await Intern.find({ status: { $nin: ["frozen", "archived"] } })
             .populate("branches.branch", "name telegramLink")
             .populate("branches.mentor", "name lastName");
+
+        // Fetch all rules once to build a ruleId → category map for penalty computation.
+        const allRules = await Rule.find({}).select("category").lean();
+        const ruleMap = buildRuleMap(allRules);
 
         const now = new Date();
 
@@ -1122,6 +1302,9 @@ class InternService {
             const gradeKey = gradeMap[intern.grade] || intern.grade;
             const gradeConfig = grades[gradeKey];
 
+            // 🔹 Shtraf ma'lumotlari
+            const penaltyInfo = computePenalties(intern.violations || [], ruleMap);
+
             if (!gradeConfig) {
                 return {
                     _id: intern._id,
@@ -1137,6 +1320,7 @@ class InternService {
                     lessonsPerMonth: null,
                     totalLessonsRequired: null,
                     totalLessonsVisited: totalLessons,
+                    penaltyInfo,
                 };
             }
 
@@ -1149,8 +1333,10 @@ class InternService {
 
             const attendance = maxLessons > 0 ? totalLessons / maxLessons : 0;
 
-            // umumiy reyting formulasi
+            // umumiy reyting formulasi (raw: 0–5)
             const rating = intern.score * 0.7 + attendance * 5 * 0.3;
+
+            const adjustedRating = Math.max(0, rating - penaltyInfo.totalDeduction);
 
             return {
                 _id: intern._id,
@@ -1162,10 +1348,11 @@ class InternService {
                 grade: intern.grade,
                 score: intern.score,
                 attendance: (attendance * 100).toFixed(1) + "%",
-                rating: rating.toFixed(2),
+                rating: +adjustedRating.toFixed(2),
                 lessonsPerMonth: gradeConfig.lessonsPerMonth,
                 totalLessonsRequired: Math.round(maxLessons),
                 totalLessonsVisited: totalLessons,
+                penaltyInfo,
             };
         });
 

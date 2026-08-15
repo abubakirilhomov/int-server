@@ -55,6 +55,21 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
     };
   }
 
+  // Senior internlar darslarga kirmaydi — tutorlar bilan ishlaydi.
+  // Shuning uchun ular uchun plan bloklanmaydi.
+  if (intern.grade === "senior") {
+    return {
+      isPlanBlocked: false,
+      reason: "Senior intern — tutor rejimi. Dars talabi yo'q.",
+      weeklyTarget: 0,
+      completedWeeksInMonth: 0,
+      requiredLessonsByNow: 0,
+      confirmedLessonsThisMonth: 0,
+      deficit: 0,
+      isSenior: true,
+    };
+  }
+
   // Архивные и замороженные не блокируются по плану в принципе.
   if (intern.status === "archived") {
     return {

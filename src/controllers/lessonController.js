@@ -464,14 +464,17 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
       };
     }
 
-    let norm;
+    // Senior internlar darslarga kirmaydi - reja (norm) doim 0.
+    const isSenior = intern.grade?.toLowerCase() === "senior";
 
-    if (period === "month" && !prevMonth) {
+    let norm = 0;
+
+    if (!isSenior && period === "month" && !prevMonth) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const effectiveStart = startWorkDate > monthStart ? startWorkDate : monthStart;
       const daysInMonth = daysBetween(effectiveStart, now);
       norm = Math.ceil((daysInMonth / 30) * gradeConfig.lessonsPerMonth);
-    } else if (period === "month" && prevMonth === "true") {
+    } else if (!isSenior && period === "month" && prevMonth === "true") {
       const prevMonthStart = firstDay;
       const prevMonthEnd = lastDay;
       if (startWorkDate <= prevMonthStart) {
@@ -482,9 +485,9 @@ exports.getAttendanceStats = catchAsync(async (req, res) => {
       } else {
         norm = 0;
       }
-    } else if (period === "week") {
+    } else if (!isSenior && period === "week") {
       norm = Math.round(gradeConfig.lessonsPerMonth / 4);
-    } else if (startDate && endDate) {
+    } else if (!isSenior && startDate && endDate) {
       const periodDays = daysBetween(firstDay, lastDay);
       norm = Math.ceil((periodDays / 30) * gradeConfig.lessonsPerMonth);
     }

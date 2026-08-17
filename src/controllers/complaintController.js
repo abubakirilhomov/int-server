@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Intern = require("../models/internModel");
-const AppError = require("../utils/appError");
+const AppError = require("../utils/AppError");
 const catchAsync = require("../utils/catchAsync");
 
 // Жалобы живут внутри Intern.complaints. Разворачиваем их в плоский список —

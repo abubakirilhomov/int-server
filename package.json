@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest --verbose"
+  },
+  "config": {
+    "_comment": "mongodb-memory-server standart holda eng oxirgi mongod (8.x) ni yuklaydi. U macOS 13 va undan eskisida SIGABRT bilan yiqiladi, natijada integration testlar mahalliy mashinada umuman ishga tushmasdi. Versiyani qadab qo'yish testlarni hamma joyda bir xil qiladi.",
+    "mongodbMemoryServer": {
+      "version": "6.0.14"
+    }
   },
   "keywords": [],
   "author": "",
@@ -17,7 +24,6 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.3.2",
     "googleapis": "^155.0.0",
     "helmet": "^8.1.0",
@@ -26,13 +32,12 @@
     "mongoose": "^8.17.0",
     "multer": "^2.1.1",
     "node-cron": "^4.2.1",
-    "nodemon": "^3.1.10",
     "streamifier": "^0.1.1",
-    "web-push": "^3.6.7",
-    "xss-clean": "^0.1.4"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "jest": "^30.3.0",
-    "mongodb-memory-server": "^11.2.0"
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.14"
   }
 }

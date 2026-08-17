@@ -4,9 +4,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# package-lock.json ATAYLAB ignore QILINMAYDI.
+# .github/workflows/test.yml `npm ci` ni ishlatadi, u esa lock fayl bo'lmasa
+# EUSAGE bilan darhol yiqiladi — ya'ni lock ignore'da turgan vaqtda CI hech
+# qachon ishlamagan. Lock fayl commit qilinishi shart.
 
 # Secrets
 credentials.json

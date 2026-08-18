@@ -69,9 +69,11 @@ exports.loginIntern = catchAsync(async (req, res) => {
 
     const surveyCompleted = Boolean(intern.internshipSurvey?.submittedAt);
 
+    // refreshToken is deliberately NOT included here — it already rides the
+    // httpOnly cookie set above. Echoing it in the JSON body would expose a
+    // 30-day-lived credential in plain text in the browser's Network tab.
     res.status(200).json({
       token,
-      refreshToken,
       user: {
         _id: intern._id,
         name: intern.name,
@@ -113,7 +115,8 @@ exports.refreshToken = async (req, res) => {
 
     const decoded = jwt.verify(
       refreshToken,
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      { algorithms: ["HS256"] }
     );
 
     if (decoded.jti) {
@@ -371,8 +374,15 @@ exports.rateIntern = catchAsync(async (req, res) => {
 
 // Добавление посещённых уроков
 exports.addLessonVisit = catchAsync(async (req, res) => {
+  // mentorId must be the caller's own id, never trusted from the body —
+  // otherwise anyone could log a lesson attributed to an arbitrary mentor.
+  if (req.user?.role === "intern") {
+    throw new AppError("Только ментор может отмечать уроки", 403);
+  }
+  const mentorId = req.user.id || req.user._id;
+
   const result = await internService.addLessonVisit(
-    req.body.mentorId,
+    mentorId,
     req.params.id,
     req.body
   );

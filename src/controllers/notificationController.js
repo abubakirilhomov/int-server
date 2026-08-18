@@ -9,9 +9,14 @@ webpush.setVapidDetails(
 );
 
 const subscribeUser = catchAsync(async (req, res) => {
-  const { subscription, userId, userType } = req.body;
+  const { subscription } = req.body;
+  // userId/userType come from the authenticated token, never the request
+  // body — otherwise any caller could register a subscription (or hijack
+  // notifications) for an arbitrary user.
+  const userId = req.user.id;
+  const userType = req.user.role === "intern" ? "intern" : "mentor";
 
-  if (!subscription || !userId || !userType) {
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
     return res
       .status(400)
       .json({ success: false, message: "Некорректные данные подписки" });

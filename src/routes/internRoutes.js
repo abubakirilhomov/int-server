@@ -38,7 +38,7 @@ router.get('/', auth, resolveActiveBranch, internCtrl.getInterns); // досту
 router.put('/:id', auth, isAdmin, internCtrl.updateIntern);
 router.delete('/:id', auth, isAdmin, internCtrl.deleteIntern);
 router.post('/:id/rate', auth, internCtrl.rateIntern); // ментор может оценивать
-router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки
+router.post('/:id/lessons', auth, internCtrl.addLessonVisit); // ментор может отмечать уроки (mentorId берётся из токена, роль проверяется в контроллере)
 router.get('/:id', auth, internCtrl.getInternProfile);
 router.patch("/:id/upgrade", auth, isAdmin, internCtrl.upgradeInternGrade);
 router.patch("/:id/bonus-lessons", auth, isAdmin, internCtrl.addBonusLessons);
@@ -52,7 +52,7 @@ router.patch("/:id/unarchive", auth, isAdmin, internCtrl.unarchiveIntern);
 router.post("/:id/reset-password", auth, isAdmin, internCtrl.resetPassword);
 router.post("/:id/warnings", auth, isHeadIntern, internCtrl.headInternWarning);
 router.post("/:id/comments", auth, isHeadIntern, internCtrl.addComment);
-router.get("/:id/comments", auth, internCtrl.getComments);
+router.get("/:id/comments", auth, isHeadIntern, internCtrl.getComments);
 router.delete("/:id/comments/:commentId", auth, isHeadIntern, internCtrl.deleteComment);
 router.post("/:id/complaints", auth, resolveActiveBranch, internCtrl.addBranchManagerComplaint);
 

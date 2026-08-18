@@ -184,9 +184,11 @@ exports.loginMentor = catchAsync(async (req, res) => {
   );
   setRefreshCookie(res, "refresh_mentor", refreshToken);
 
+  // refreshToken is deliberately NOT included here — it already rides the
+  // httpOnly cookie set above. Echoing it in the JSON body would expose a
+  // 30-day-lived credential in plain text in the browser's Network tab.
   res.json({
     token,
-    refreshToken,
     user: {
       _id: mentor._id,
       name: mentor.name,
@@ -207,7 +209,7 @@ exports.refreshMentorToken = catchAsync(async (req, res) => {
   if (!refreshToken) throw new AppError("Refresh token required", 401);
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, { algorithms: ["HS256"] });
 
     if (decoded.jti) {
       const revoked = await RevokedToken.exists({ jti: decoded.jti });
@@ -282,7 +284,8 @@ exports.logoutMentor = catchAsync(async (req, res) => {
     try {
       const decoded = jwt.verify(
         refreshToken,
-        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+        { algorithms: ["HS256"] }
       );
       if (decoded.jti && decoded.exp) {
         await RevokedToken.create({

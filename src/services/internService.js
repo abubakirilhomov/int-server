@@ -305,34 +305,34 @@ class InternService {
     }
 
     async getInternProfile(user, id) {
-        let intern;
+        // req.user is the decoded JWT, whose own-id field is `id`, not
+        // `_id` — using `_id` here always evaluated to undefined, which
+        // silently fell through to the requested `id`, letting ANY
+        // authenticated intern fetch ANY other intern's full profile
+        // (violations, grade, mentor, probation dates) just by ID.
+        const requesterId = String(user?.id || user?._id || "");
+        const targetId = id || requesterId;
+        const isSelf = requesterId && requesterId === String(targetId);
+        const isAdmin = isAdminUser(user);
 
-        // 🔹 Если админ и указан ID → можно смотреть чужой профиль
-        if (isAdminUser(user) && id) {
-            intern = await Intern.findById(id)
-                .select("-password")
-                .populate("branches.branch", "name telegramLink")
-                .populate("branches.mentor", "name lastName")
-                .populate("violations.ruleId", "category title consequence");
-        } else {
-            const internId = user?._id || id;
-            if (!internId) {
-                throw new AppError("Нет доступа", 403);
-            }
-
-            intern = await Intern.findById(internId)
-                .select("-password")
-                .populate("branches.branch", "name telegramLink")
-                .populate("branches.mentor", "name lastName")
-                .populate("violations.ruleId", "category title consequence");
+        if (!targetId) {
+            throw new AppError("Нет доступа", 403);
         }
+        // Non-admin, non-self access is only for staff (mentors/reception),
+        // never for another intern's account.
+        if (!isAdmin && !isSelf && user?.role === "intern") {
+            throw new AppError("Нет доступа", 403);
+        }
+
+        const intern = await Intern.findById(targetId)
+            .select("-password")
+            .populate("branches.branch", "name telegramLink")
+            .populate("branches.mentor", "name lastName")
+            .populate("violations.ruleId", "category title consequence");
 
         if (!intern) throw new AppError("Стажёр не найден", 404);
 
         // 🔹 PII сокрытие: phoneNumber/telegram видят только сам интерн и админ
-        const requesterId = String(user?._id || user?.id || "");
-        const isSelf = requesterId && requesterId === String(intern._id);
-        const isAdmin = isAdminUser(user);
         const canSeePII = isSelf || isAdmin;
 
         // 🔹 Инфо о грейде

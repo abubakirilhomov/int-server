@@ -162,7 +162,7 @@ exports.callback = catchAsync(async (req, res) => {
   // Decode state first so we know where to redirect errors back to
   let stateClaims = null;
   try {
-    stateClaims = jwt.verify(String(state || ""), process.env.JWT_SECRET);
+    stateClaims = jwt.verify(String(state || ""), process.env.JWT_SECRET, { algorithms: ["HS256"] });
   } catch {
     throw new AppError("Невалидный state — повторите вход", 400);
   }
@@ -261,7 +261,7 @@ exports.link = catchAsync(async (req, res) => {
 
   let claims;
   try {
-    claims = jwt.verify(linkageToken, process.env.JWT_SECRET);
+    claims = jwt.verify(linkageToken, process.env.JWT_SECRET, { algorithms: ["HS256"] });
   } catch {
     throw new AppError("Linkage token истёк или невалиден — повторите вход", 401);
   }

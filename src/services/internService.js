@@ -250,9 +250,9 @@ class InternService {
                 lessons: lessonCount,
                 feedbacks: feedbackCount,
                 ratingScore: +adjustedRatingScore.toFixed(2),
-                // 🔹 Shtraf ma'lumotlari: kategoriya bo'yicha sonlar, jami
-                // ayirish, eng yomon darajasi (profil/sahifa uchun).
-                penaltyInfo,
+                // Shtraf (penaltyInfo) ataylab bu yerda qaytarilmaydi — bu ochiq
+                // reyting ro'yxati (client-rating), hammaga ko'rinadi. Jarima faqat
+                // intern o'z profilida ko'rishi kerak (getInternProfile).
                 // 🔹 Premium/VIP belgilari + yutuqlar (reyting sahifasi uchun)
                 isHeadIntern: (intern.branches || []).some((b) => b.isHeadIntern),
                 isSenior: intern.grade === "senior",

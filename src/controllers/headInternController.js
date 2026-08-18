@@ -36,7 +36,7 @@ exports.getInternsActivity = catchAsync(async (req, res, next) => {
     status: "active",
     _id: { $ne: headInternId },
   })
-    .select("_id name lastName grade score lessonsPerMonth lastLessonDate currentStreak xp level branches violations violationsCount lastViolationAt")
+    .select("_id name lastName grade score lessonsPerMonth lastLessonDate currentStreak xp level branches violations violationsCount lastViolationAt telegram")
     .lean();
 
   // Shu oydagi darslar (filialdagi barcha internlar uchun)
@@ -132,6 +132,7 @@ exports.getInternsActivity = catchAsync(async (req, res, next) => {
       isSenior: intern.grade === "senior",
       lessonsThisMonth: stats.confirmed,
       lessonsPending: stats.pending,
+      telegram: intern.telegram || "",
       uniqueActiveDays,
       // Kunlik ortalama darslar soni butun son bo'ladi.
       // 0.5 dan 1 gacha 1, 1.5 dan esa 2 deb hisoblanadi.

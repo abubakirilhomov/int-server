@@ -359,6 +359,32 @@ internSchema.pre("save", async function (next) {
 
   next();
 });
+
+// Jarima (violation) yozuvlari — audit trail: bir marta yozilgan qoidabuzarlik
+// hech qachon (admin panel, buglar, kelajakdagi kod orqali ham) o'chirilmasligi
+// kerak. Bu tekshiruv route/controller darajasida emas, model darajasida —
+// ya'ni kim va qanday yo'l bilan saqlamoqchi bo'lmasin, mavjud violation._id
+// massivdan g'oyib bo'lsa, save butunlay rad etiladi.
+internSchema.pre("save", async function (next) {
+  if (this.isNew || !this.isModified("violations")) return next();
+
+  const original = await this.constructor
+    .findById(this._id)
+    .select("violations")
+    .lean();
+  if (!original) return next();
+
+  const currentIds = new Set(this.violations.map((v) => String(v._id)));
+  const removed = (original.violations || []).some(
+    (v) => !currentIds.has(String(v._id))
+  );
+  if (removed) {
+    return next(new Error("Jarima (violation) yozuvini o'chirish taqiqlangan"));
+  }
+
+  next();
+});
+
 internSchema.pre("findOneAndDelete", async function (next) {
   const internId = this.getQuery()._id;
   await Lesson.deleteMany({ intern: internId });

@@ -9,7 +9,7 @@ const internSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   lastName: { type: String, required: true, trim: true },
   username: { type: String, required: true, unique: true, trim: true },
-  password: { type: String, required: true, minlength: 8 },
+  password: { type: String, required: true, minlength: 8, select: false },
   phoneNumber: { type: String, trim: true, default: "" },
   telegram: { type: String, trim: true, default: "" },
   // Возраст из анкеты-заявки (или введённый админом вручную). Не required —

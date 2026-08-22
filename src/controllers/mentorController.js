@@ -307,6 +307,11 @@ exports.logoutMentor = catchAsync(async (req, res) => {
 });
 
 exports.getMentorStats = catchAsync(async (req, res) => {
+  const requesterId = String(req.user?.id || req.user?._id || "");
+  const isSelf = requesterId && requesterId === String(req.params.id);
+  if (!isSelf && !isAdminUser(req.user)) {
+    throw new AppError("Нет доступа", 403);
+  }
   const stats = await mentorService.getMentorStats(req.params.id);
   res.json({
     success: true,

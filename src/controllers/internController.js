@@ -482,12 +482,37 @@ exports.addComment = catchAsync(async (req, res, next) => {
   res.status(201).json({ comment: savedComment });
 });
 
+// Head intern faqat o'z filialidagi internlarga tegishli amallarni bajara
+// oladi — addComment'dagi bilan bir xil tekshiruv (avval faqat u yerda bor
+// edi, getComments/deleteComment boshqa filial internining izohlarini
+// o'qish/o'chirishga ruxsat berib qo'ygan edi).
+async function assertHeadInternOwnsBranch(req, targetIntern) {
+  const commenter = req.user?.id || req.user?._id;
+  const commenterInfo = await Intern.findById(commenter).select("branches");
+  if (!commenterInfo) throw new AppError("Foydalanuvchi topilmadi", 404);
+
+  const headBranchIds = commenterInfo.branches
+    .filter((b) => b.isHeadIntern)
+    .map((b) => String(b.branch?._id || b.branch));
+  if (headBranchIds.length === 0) {
+    throw new AppError("Faqat Head Intern bu amalni bajara oladi", 403);
+  }
+
+  const isInBranch = targetIntern.branches.some((b) =>
+    headBranchIds.includes(String(b.branch?._id || b.branch))
+  );
+  if (!isInBranch) {
+    throw new AppError("Faqat o'z filialingizdagi internlarga tegishli amal", 403);
+  }
+}
+
 // ─── Head intern: izohlar ro'yxatini olish ──────────────────────────────────
 exports.getComments = catchAsync(async (req, res, next) => {
-  const targetIntern = await Intern.findById(req.params.id)
-    .select("comments name lastName")
-    .lean();
+  const targetIntern = await Intern.findById(req.params.id).select(
+    "comments name lastName branches"
+  );
   if (!targetIntern) return next(new AppError("Intern topilmadi", 404));
+  await assertHeadInternOwnsBranch(req, targetIntern);
   res.json({ comments: targetIntern.comments || [] });
 });
 
@@ -496,6 +521,7 @@ exports.deleteComment = catchAsync(async (req, res, next) => {
   const { id, commentId } = req.params;
   const targetIntern = await Intern.findById(id);
   if (!targetIntern) return next(new AppError("Intern topilmadi", 404));
+  await assertHeadInternOwnsBranch(req, targetIntern);
 
   const commentIdx = targetIntern.comments.findIndex(
     (c) => String(c._id) === String(commentId)

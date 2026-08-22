@@ -12,6 +12,18 @@ const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const isAdminUser = require("../utils/isAdminUser");
 const { tashkentWallClockToDate } = require("../utils/tashkentTime");
+const Setting = require("../models/settingModel");
+
+const DEFAULT_LESSON_LOOKBACK_DAYS = 2;
+// Small forward tolerance for client clock skew — the lesson time picker is
+// capped at "now" client-side, but clocks drift a few minutes across devices.
+const FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+async function getLessonLookbackMs() {
+  const doc = await Setting.findOne({ key: "lessonLookbackDays" }).lean();
+  const days = Number(doc?.value) > 0 ? Number(doc.value) : DEFAULT_LESSON_LOOKBACK_DAYS;
+  return days * 24 * 60 * 60 * 1000;
+}
 
 // Only lessons younger than this window force an intern to leave feedback.
 // Anything older is grandfathered: it still appears on the admin "stuck
@@ -21,8 +33,24 @@ const FEEDBACK_REQUIRED_WINDOW_MS = 48 * 60 * 60 * 1000;
 const feedbackWindowStart = () =>
   new Date(Date.now() - FEEDBACK_REQUIRED_WINDOW_MS);
 
+// How far a logged lesson's wall-clock `time` may sit from "now". Backdating
+// is intentionally allowed within this window (interns legitimately log a
+// lesson the next morning), but unbounded backdating/future-dating lets an
+// intern fabricate attendance history to game the monthly norm and rating —
+// so both directions are capped.
+const LESSON_TIME_MAX_FUTURE_MS = 15 * 60 * 1000;
+const LESSON_TIME_MAX_PAST_MS = 7 * 24 * 60 * 60 * 1000;
+
 exports.createLesson = catchAsync(async (req, res) => {
-  const payload = { ...req.body };
+  // Whitelist: the client supplies which lesson happened, when, with whom,
+  // and an optional self-reported sentiment emoji (`feedback` — cosmetic,
+  // not used in any scoring). `status`/`isRated`/`internFeedback` are
+  // server-controlled state machines (mentor confirms/rates, intern submits
+  // structured feedback via its own dedicated endpoint with a computed
+  // score) — accepting them here would let a caller self-confirm a lesson
+  // or fabricate a rating outright.
+  const { topic, time, group, mentor, intern: internField, branch, feedback } = req.body;
+  const payload = { topic, time, group, mentor, branch, feedback, intern: internField };
 
   if (req.user?.role === "intern") {
     payload.intern = req.user.id;
@@ -89,6 +117,13 @@ exports.createLesson = catchAsync(async (req, res) => {
   if (!derivedDate) {
     return res.status(400).json({ message: "Неверный формат времени урока." });
   }
+  const skewMs = derivedDate.getTime() - Date.now();
+  if (skewMs > LESSON_TIME_MAX_FUTURE_MS) {
+    return res.status(400).json({ message: "Урок нельзя логировать заранее — время ещё не наступило." });
+  }
+  if (-skewMs > LESSON_TIME_MAX_PAST_MS) {
+    return res.status(400).json({ message: "Урок слишком старый для добавления. Обратитесь к администратору." });
+  }
   payload.date = derivedDate;
 
   // Ловим только ТОЧНЫЙ дубль (случайный двойной сабмит): тот же интерн +
@@ -154,8 +189,18 @@ exports.createLesson = catchAsync(async (req, res) => {
   res.status(201).json(lesson);
 });
 
+// GET /api/lessons — scoped by role so an intern/mentor can only ever pull
+// their own lesson history, never every other intern's topics, mentor
+// feedback, and self-reported ratings via one unfiltered call.
 exports.getLessons = catchAsync(async (req, res) => {
-  const lessons = await Lesson.find()
+  const requesterId = req.user.id || req.user._id;
+  const filter = isAdminUser(req.user)
+    ? {}
+    : req.user?.role === "mentor"
+    ? { mentor: requesterId }
+    : { intern: requesterId };
+
+  const lessons = await Lesson.find(filter)
     .populate("intern", "name lastName")
     .populate("mentor", "name lastName");
   res.json(lessons);

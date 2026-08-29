@@ -7,6 +7,7 @@ const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getWeeklyPlanView } = require("../services/weeklyPlanService");
 const { tashkentMonthBounds } = require("../utils/tashkentTime");
 const { computePenalties, buildRuleMap } = require("../utils/penaltyUtils");
+const { frozenDaysBetween } = require("../utils/trialCountingFreeze");
 
 const MAX_SCORE = 5;
 const PROMOTION_THRESHOLD = 50;
@@ -142,7 +143,10 @@ exports.getDashboardStats = async (req, res) => {
         const trialTotalGoal = effectiveLessonsPerMonth * gradeConfig.trialPeriod;
 
         // Days Calculations
-        const daysWorking = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
+        // 2026-08-29 .. 2026-09-03: counting is frozen (see trialCountingFreeze.js) —
+        // subtracted here so daysWorking doesn't advance during that gap.
+        const daysWorkingRaw = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
+        const daysWorking = Math.max(0, daysWorkingRaw - frozenDaysBetween(startDate, now));
         const trialPeriodDays = gradeConfig.trialPeriod * 30;
         const daysRemaining = Math.max(trialPeriodDays - daysWorking, 0);
 

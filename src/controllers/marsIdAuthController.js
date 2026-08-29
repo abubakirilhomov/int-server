@@ -115,6 +115,10 @@ const issueInternalSession = async (user, kind) => {
       internshipSurvey: user.internshipSurvey?.submittedAt
         ? user.internshipSurvey
         : null,
+      // Needed on login so the client can show the mandatory contact-info modal
+      // for interns who have neither on file, without a separate profile fetch.
+      phoneNumber: user.phoneNumber || "",
+      telegram: user.telegram || "",
     },
   };
 };

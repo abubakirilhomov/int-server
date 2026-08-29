@@ -6,6 +6,7 @@ const {
   startOfNextTashkentMonth,
   tashkentWeekday,
 } = require("./tashkentTime");
+const { COUNTING_FREEZE_START, COUNTING_FREEZE_END } = require("./trialCountingFreeze");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,6 +35,16 @@ const countWorkingDaysInclusive = (from, to) => {
     cursor = new Date(cursor.getTime() + DAY_MS);
   }
   return count;
+};
+
+// Working days of [from, to] that overlap the counting-freeze window (see
+// trialCountingFreeze.js) — subtracted from elapsedWorkingDays below so
+// requiredLessonsByNow, and therefore isPlanBlocked, doesn't advance during it.
+const frozenWorkingDaysInRange = (from, to) => {
+  const start = new Date(Math.max(from.getTime(), COUNTING_FREEZE_START.getTime()));
+  const end = new Date(Math.min(to.getTime(), COUNTING_FREEZE_END.getTime() - DAY_MS));
+  if (start > end) return 0;
+  return countWorkingDaysInclusive(start, end);
 };
 
 const getCompletedWeeksInMonth = (date = new Date()) => {
@@ -139,7 +150,13 @@ async function getInternPlanStatus(intern, referenceDate = new Date()) {
   const effectiveStart = startWorkDate > start ? startOfTashkentDay(startWorkDate) : start;
   const effectiveEnd = referenceDate < end ? referenceDate : end;
 
-  const elapsedWorkingDays = countWorkingDaysInclusive(effectiveStart, effectiveEnd);
+  // 2026-08-29 .. 2026-09-03: counting is frozen (see trialCountingFreeze.js) — the
+  // denominator (whole month's working days) is untouched, only progress-so-far is.
+  const elapsedWorkingDaysRaw = countWorkingDaysInclusive(effectiveStart, effectiveEnd);
+  const elapsedWorkingDays = Math.max(
+    0,
+    elapsedWorkingDaysRaw - frozenWorkingDaysInRange(effectiveStart, effectiveEnd)
+  );
   const totalWorkingDaysInWindow = countWorkingDaysInclusive(effectiveStart, end);
 
   const requiredLessonsByNow =

@@ -84,6 +84,10 @@ exports.status = catchAsync(async (req, res) => {
         passed.push({ intern, status: "passed", percentage: iv.percentage });
       } else if (iv.status === "failed") {
         failed.push({ intern, status: "failed", percentage: iv.percentage });
+      } else if (iv.status === "missed") {
+        // Online suhbatga belgilangan vaqtda kirmagan — qizil bucket,
+        // lekin "yiqilgan"dan farqli belgi bilan
+        failed.push({ intern, status: "missed", percentage: 0 });
       } else {
         // pending yozuvi mavjud
         pending.push({ intern, status: "pending" });

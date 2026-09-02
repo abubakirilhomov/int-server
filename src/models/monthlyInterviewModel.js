@@ -38,9 +38,21 @@ const monthlyInterviewSchema = new mongoose.Schema(
     month: { type: String, required: true, index: true }, // "2026-08"
     status: {
       type: String,
-      enum: ["pending", "passed", "failed"],
+      // "missed" — online suhbatga belgilangan vaqtda kirmagan (avtomatik
+      // yaratiladi, savolsiz). "failed"dan farqi: kirgan-u yiqilgani emas.
+      enum: ["pending", "passed", "failed", "missed"],
       default: "pending",
       index: true,
+    },
+    session: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MonthlyInterviewSession",
+      default: null,
+    },
+    attendance: {
+      type: String,
+      enum: ["present", "missed", null],
+      default: null,
     },
     questions: { type: [questionSchema], default: [] },
     passedCount: { type: Number, default: 0 },

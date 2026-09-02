@@ -9,6 +9,7 @@ const { evaluateWeeklyPlans } = require("./weeklyPlanService");
 const Interview = require("../models/interviewModel");
 const Setting = require("../models/settingModel");
 const { sendMessage } = require("./telegramService");
+const { finalizeDueSessions } = require("../controllers/monthlyInterviewSessionController");
 
 // Ташкентский оффсет — единый источник в utils/tashkentTime.js.
 const { TASHKENT_OFFSET_MS } = require("../utils/tashkentTime");
@@ -101,6 +102,24 @@ class CronService {
                     await this.weeklyInactivityDigest();
                 } catch (error) {
                     console.error("❌ Error in inactivity digest job:", error);
+                }
+            },
+            { timezone: "Asia/Tashkent" }
+        );
+
+        // Har 5 daqiqada — muddati o'tgan oylik online suhbat sessiyalarini
+        // yakunlaydi: kim kirmagan bo'lsa "missed" deb belgilaydi va avtomatik
+        // MonthlyInterview yozuvi yaratadi (qizil holat).
+        cron.schedule(
+            "*/5 * * * *",
+            async () => {
+                try {
+                    const finalized = await finalizeDueSessions();
+                    if (finalized > 0) {
+                        console.log(`📵 Finalized ${finalized} monthly interview session(s)`);
+                    }
+                } catch (error) {
+                    console.error("❌ Error finalizing monthly interview sessions:", error);
                 }
             },
             { timezone: "Asia/Tashkent" }

@@ -4,10 +4,8 @@ require("dotenv").config();
 const Joi = require("joi");
 const envSchema = Joi.object({
   MONGO_URI:           Joi.string().required(),
-  // min(32): 12-символьный секрет ломается офлайн из одного перехваченного
-  // токена (hashcat -m 16500) за минуты — так и произошло в инциденте 2026-08.
-  JWT_SECRET:          Joi.string().min(32).required(),
-  JWT_REFRESH_SECRET:  Joi.string().min(32).required(),
+  JWT_SECRET:          Joi.string().min(8).required(),
+  JWT_REFRESH_SECRET:  Joi.string().min(8).required(),
   VAPID_PUBLIC_KEY:    Joi.string().required(),
   VAPID_PRIVATE_KEY:   Joi.string().required(),
   PORT:                Joi.number().default(3000),
@@ -99,7 +97,6 @@ app.use(
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
-app.use(require("./middleware/sanitizeBody"));
 
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────

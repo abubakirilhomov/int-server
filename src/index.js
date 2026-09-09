@@ -4,8 +4,10 @@ require("dotenv").config();
 const Joi = require("joi");
 const envSchema = Joi.object({
   MONGO_URI:           Joi.string().required(),
-  JWT_SECRET:          Joi.string().min(8).required(),
-  JWT_REFRESH_SECRET:  Joi.string().min(8).required(),
+  // min(32): 12-символьный секрет ломается офлайн из одного перехваченного
+  // токена (hashcat -m 16500) за минуты — так и произошло в инциденте 2026-08.
+  JWT_SECRET:          Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET:  Joi.string().min(32).required(),
   VAPID_PUBLIC_KEY:    Joi.string().required(),
   VAPID_PRIVATE_KEY:   Joi.string().required(),
   PORT:                Joi.number().default(3000),
@@ -22,6 +24,11 @@ const envSchema = Joi.object({
   // Telegram (used for application notifications). Optional — if absent,
   // notifications log an error on the Application doc but submit still succeeds.
   TELEGRAM_BOT_TOKEN:             Joi.string().optional(),
+  // Аудит-лог. Выключается без выката кода (AUDIT_ENABLED=false).
+  AUDIT_ENABLED:         Joi.string().valid("true", "false").default("true"),
+  AUDIT_RETENTION_DAYS:  Joi.number().integer().min(1).default(180),
+  AUDIT_FLUSH_MS:        Joi.number().integer().min(100).default(2000),
+  AUDIT_MAX_BODY_BYTES:  Joi.number().integer().min(256).default(4096),
 }).unknown(true);
 
 const { error: envError } = envSchema.validate(process.env);
@@ -92,6 +99,7 @@ app.use(
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
+app.use(require("./middleware/sanitizeBody"));
 
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────
@@ -118,6 +126,11 @@ app.use("/api", generalLimiter);
 app.use("/api/interns/login", authLimiter);
 app.use("/api/mentors/login", authLimiter);
 
+// ─── Audit log ────────────────────────────────────────────────────────────────
+// До роутов, но после парсинга тела и rate-limit'а: нужен разобранный req.body,
+// а отлупы лимитера (429) — сами по себе сигнал, их логировать полезно.
+app.use("/api", require("./middleware/auditLog"));
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/interns", internRoutes);
 app.use("/api/mentors", mentorRoutes);
@@ -139,6 +152,7 @@ app.use("/api/interviews", require("./routes/interviewRoutes"));
 app.use("/api/interview-topics", require("./routes/interviewTopicRoutes"));
 app.use("/api/intern-requests", require("./routes/internRequestRoutes"));
 app.use("/api/badges", require("./routes/badgeRoutes"));
+app.use("/api/audit-logs", require("./routes/auditLogRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

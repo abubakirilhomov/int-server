@@ -1,4 +1,6 @@
 const AppError = require("../utils/AppError");
+const errorTracker = require("../services/errorTracker");
+const { resolveRoutePattern } = require("../middleware/auditLog");
 
 const handleCastErrorDB = (err) => {
     const message = `Некорректное значение поля ${err.path}`;
@@ -52,9 +54,51 @@ const sendErrorProd = (err, res) => {
     }
 };
 
+/**
+ * 5xx уходит в трекер ошибок, 4xx — НЕТ.
+ *
+ * 4xx это в подавляющем большинстве нормальная работа приложения (не нашёл,
+ * не авторизован, не прошёл валидацию) — они уже лежат в аудит-логе, и заводить
+ * по ним issue значит утопить разбор в шуме. 5xx — всегда наша вина.
+ *
+ * Операционные ошибки (AppError) с кодом 5xx тоже пишем: 503 «сервис недоступен»
+ * это ровно то, о чём надо знать.
+ */
+const trackServerError = (err, req) => {
+    try {
+        if (!err.statusCode || err.statusCode < 500) return;
+        errorTracker.track({
+            app: "server",
+            kind: "http-5xx",
+            message: err.message || "Unknown server error",
+            stack: err.stack,
+            routePattern: resolveRoutePattern(req),
+            url: req.originalUrl,
+            userAgent: req.headers && req.headers["user-agent"],
+            ip: req.ip,
+            actor: req.user
+                ? {
+                    id: String(req.user.id),
+                    kind: req.user.role === "intern" ? "intern" : "mentor",
+                    role: req.user.role || null,
+                    isAdmin: req.user.isAdmin === true || req.user.role === "admin",
+                    name: [req.user.name, req.user.lastName].filter(Boolean).join(" ") || null,
+                    identifier: null,
+                }
+                : undefined,
+            context: { method: req.method, statusCode: err.statusCode },
+        });
+    } catch (e) {
+        // Обработчик ошибок не имеет права падать сам.
+        console.error("[errors] не удалось записать 5xx:", e.message);
+    }
+};
+
 module.exports = (err, req, res, next) => {
     err.statusCode = err.statusCode || 500;
     err.status = err.status || "error";
+
+    trackServerError(err, req);
 
     if (process.env.NODE_ENV === "development") {
         sendErrorDev(err, res);

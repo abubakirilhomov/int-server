@@ -9,6 +9,9 @@ const { evaluateWeeklyPlans } = require("./weeklyPlanService");
 const Interview = require("../models/interviewModel");
 const Setting = require("../models/settingModel");
 const { sendMessage } = require("./telegramService");
+// guardJob превращает падение задачи в событие трекера. Раньше каждая задача
+// глотала исключение в console.error — поймано, но не видно нигде.
+const { guardJob } = require("./errorTracker");
 
 // Ташкентский оффсет — единый источник в utils/tashkentTime.js.
 const { TASHKENT_OFFSET_MS } = require("../utils/tashkentTime");
@@ -35,27 +38,19 @@ if (publicVapidKey && privateVapidKey) {
 class CronService {
     init() {
         // Каждый день в 10:00 — напоминания
-        cron.schedule("0 10 * * *", async () => {
+        cron.schedule("0 10 * * *", guardJob("daily-notifications", async () => {
             console.log("🔔 Running daily notification job...");
-            try {
-                await this.notifyMentorsWithDebt();
-                await this.notifyInternsWithPendingLessons();
-                const reset = await resetStaleStreaks();
-                if (reset > 0) console.log(`🔥 Reset ${reset} stale streaks`);
-            } catch (error) {
-                console.error("❌ Error in daily cron job:", error);
-            }
-        });
+            await this.notifyMentorsWithDebt();
+            await this.notifyInternsWithPendingLessons();
+            const reset = await resetStaleStreaks();
+            if (reset > 0) console.log(`🔥 Reset ${reset} stale streaks`);
+        }));
 
         // 1-го числа каждого месяца в 00:05 — сброс истёкших ручных активаций
-        cron.schedule("5 0 1 * *", async () => {
+        cron.schedule("5 0 1 * *", guardJob("reset-manual-activations", async () => {
             console.log("🔄 Resetting expired manual activations...");
-            try {
-                await this.resetExpiredManualActivations();
-            } catch (error) {
-                console.error("❌ Error resetting manual activations:", error);
-            }
-        });
+            await this.resetExpiredManualActivations();
+        }));
 
         // Каждый понедельник в 00:30 Asia/Tashkent — оценка прошлой недели по
         // weeklyPlan. Сейчас shadow-mode: пишет в БД, lessonController пока не
@@ -63,31 +58,23 @@ class CronService {
         // vault/10-projects/interns-system/weekly-self-activation-plan.md.
         cron.schedule(
             "30 0 * * 1",
-            async () => {
+            guardJob("weekly-plan-evaluation", async () => {
                 console.log("📅 Weekly plan evaluation starting (shadow-mode)...");
-                try {
-                    const result = await evaluateWeeklyPlans();
-                    console.log(
-                        `✅ Weekly plan: ${result.okCount} ok, ${result.restrictedCount} restricted, ${result.adminBlockCount} admin_block (${result.skippedCount} skipped)`
-                    );
-                } catch (error) {
-                    console.error("❌ Error in weekly plan evaluation:", error);
-                }
-            },
+                const result = await evaluateWeeklyPlans();
+                console.log(
+                    `✅ Weekly plan: ${result.okCount} ok, ${result.restrictedCount} restricted, ${result.adminBlockCount} admin_block (${result.skippedCount} skipped)`
+                );
+            }),
             { timezone: "Asia/Tashkent" }
         );
 
         // Каждый день в 08:00 Asia/Tashkent — напоминание о собеседованиях на сегодня.
         cron.schedule(
             "0 8 * * *",
-            async () => {
+            guardJob("interview-reminders", async () => {
                 console.log("📋 Running interview reminder job...");
-                try {
-                    await this.notifyTodayInterviews();
-                } catch (error) {
-                    console.error("❌ Error in interview reminder job:", error);
-                }
-            },
+                await this.notifyTodayInterviews();
+            }),
             { timezone: "Asia/Tashkent" }
         );
 
@@ -95,14 +82,10 @@ class CronService {
         // в админский Telegram (кто давно не добавлял урок). Чтобы не следить вручную.
         cron.schedule(
             "0 9 * * 1",
-            async () => {
+            guardJob("weekly-inactivity-digest", async () => {
                 console.log("📉 Running weekly inactivity digest...");
-                try {
-                    await this.weeklyInactivityDigest();
-                } catch (error) {
-                    console.error("❌ Error in inactivity digest job:", error);
-                }
-            },
+                await this.weeklyInactivityDigest();
+            }),
             { timezone: "Asia/Tashkent" }
         );
 

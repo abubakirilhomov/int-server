@@ -27,6 +27,19 @@ const envSchema = Joi.object({
   AUDIT_RETENTION_DAYS:  Joi.number().integer().min(1).default(180),
   AUDIT_FLUSH_MS:        Joi.number().integer().min(100).default(2000),
   AUDIT_MAX_BODY_BYTES:  Joi.number().integer().min(256).default(4096),
+  // Трекер ошибок. Все опциональны — система работает на дефолтах.
+  ERROR_TRACKING_ENABLED: Joi.string().valid("true", "false").default("true"),
+  ERROR_RETENTION_DAYS:   Joi.number().integer().min(1).default(30),
+  ERROR_FLUSH_MS:         Joi.number().integer().min(100).default(2000),
+  ERROR_MAX_BODY_BYTES:   Joi.number().integer().min(512).default(16384),
+  ERROR_INGEST_MAX_BODY:  Joi.string().default("64kb"),
+  ERROR_INGEST_RATE_MAX:  Joi.number().integer().min(1).default(30),
+  ERROR_INGEST_MAX_BATCH: Joi.number().integer().min(1).default(20),
+  // Уведомления об ошибках в Telegram (переиспользуют TELEGRAM_BOT_TOKEN).
+  ERROR_ALERTS_ENABLED:     Joi.string().valid("true", "false").default("true"),
+  ERROR_ALERT_CHAT_IDS:     Joi.string().allow("").optional(), // через запятую
+  ERROR_ALERT_COOLDOWN_MIN: Joi.number().integer().min(0).default(30), // 0 = без кулдауна
+  ERROR_ALERT_MAX_PER_HOUR: Joi.number().integer().min(1).default(20),
 }).unknown(true);
 
 const { error: envError } = envSchema.validate(process.env);
@@ -94,6 +107,13 @@ app.use(
   })
 );
 
+// ─── Приём отчётов об ошибках ─────────────────────────────────────────────────
+// Смонтирован ДО общего лимитера и ДО глобального парсера тела — намеренно.
+// Иначе крэш-луп в браузере съедал бы общий лимит 100 req/min и ломал бы
+// пользователю само приложение, а 10-килобайтный потолок резал бы стеки.
+// Свои лимитер и парсер — внутри роутера.
+app.use("/api/error-reports", require("./routes/errorReportRoutes"));
+
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
@@ -160,6 +180,10 @@ app.all(/(.*)/, (req, res, next) => {
 });
 
 app.use(globalErrorHandler);
+
+// ─── Падения вне запроса ──────────────────────────────────────────────────────
+// Логика в utils/fatalHandler.js — там её можно протестировать, здесь нельзя.
+require("./utils/fatalHandler").installFatalHandlers();
 
 connectDB();
 

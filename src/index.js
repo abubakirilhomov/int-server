@@ -170,6 +170,7 @@ app.use("/api/interview-topics", require("./routes/interviewTopicRoutes"));
 app.use("/api/intern-requests", require("./routes/internRequestRoutes"));
 app.use("/api/badges", require("./routes/badgeRoutes"));
 app.use("/api/audit-logs", require("./routes/auditLogRoutes"));
+app.use("/api/error-issues", require("./routes/errorIssueRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

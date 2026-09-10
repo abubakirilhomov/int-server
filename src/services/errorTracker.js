@@ -115,8 +115,27 @@ const upsertIssue = async (fingerprint, events) => {
     { upsert: true, new: true, includeResultMetadata: true }
   );
 
-  const issue = res.value;
+  let issue = res.value;
   const isNew = !res.lastErrorObject?.updatedExisting;
+
+  // Регресс: закрытая проблема вернулась.
+  //
+  // Без этого «resolved» работает как ловушка — errorAlerts глушит закрытые
+  // issue, и вернувшаяся ошибка молча копит счётчик, о котором никто не узнает.
+  // Переоткрываем и сбрасываем троттлинг, чтобы алерт сработал заново.
+  // `ignored` при этом НЕ трогаем: в том и смысл игнора, что он окончательный.
+  let regressed = false;
+  if (!isNew && issue && issue.status === "resolved") {
+    const reopened = await ErrorIssue.findOneAndUpdate(
+      { fingerprint, status: "resolved" },
+      { $set: { status: "new", regressedAt: new Date(), lastAlertCount: 0, resolvedAt: null } },
+      { new: true }
+    );
+    if (reopened) {
+      issue = reopened;
+      regressed = true;
+    }
+  }
 
   // $addToSet не умеет $slice, поэтому подрезаем отдельным запросом — и только
   // когда выборка реально переросла потолок, то есть редко.
@@ -127,7 +146,7 @@ const upsertIssue = async (fingerprint, events) => {
     );
   }
 
-  return { issue, isNew };
+  return { issue, isNew, regressed };
 };
 
 const flush = async () => {
@@ -162,7 +181,8 @@ const flush = async () => {
     try {
       const result = await upsertIssue(fingerprint, events);
       if (result && result.issue) {
-        await maybeAlert(result.issue, result.isNew, events.length);
+        // Регресс сообщаем как новую проблему: она снова требует внимания.
+        await maybeAlert(result.issue, result.isNew, { regressed: result.regressed });
       }
     } catch (err) {
       console.error("[errors] issue upsert failed:", err.message);

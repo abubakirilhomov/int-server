@@ -54,6 +54,18 @@ const errorIssueSchema = new mongoose.Schema(
 
     resolvedAt: { type: Date, default: null },
     notes: { type: String, default: null },
+
+    // Кто и когда последним менял статус — чтобы список отвечал на «кто это
+    // разобрал» без похода в аудит-лог. Полный след (когда, с какого IP, каким
+    // запросом) остаётся за аудит-логом: он висит на всём /api и пишет PATCH
+    // сюда автоматически.
+    statusChangedAt: { type: Date, default: null },
+    statusChangedBy: {
+      id: { type: String, default: null },
+      name: { type: String, default: null },
+    },
+    // Когда закрытая проблема вернулась. Обновляется трекером, не человеком.
+    regressedAt: { type: Date, default: null },
   },
   { versionKey: false, timestamps: true }
 );

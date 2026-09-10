@@ -55,10 +55,13 @@ const APP_LABELS = {
   server: "int-server",
 };
 
-const buildText = (issue, isNew, milestone) => {
-  const head = isNew
-    ? `🔴 Новая ошибка — ${APP_LABELS[issue.app] || issue.app}`
-    : `📈 Ошибка участилась (${milestone}+) — ${APP_LABELS[issue.app] || issue.app}`;
+const buildText = (issue, isNew, milestone, regressed) => {
+  const app = APP_LABELS[issue.app] || issue.app;
+  const head = regressed
+    ? `♻️ Закрытая ошибка вернулась — ${app}`
+    : isNew
+      ? `🔴 Новая ошибка — ${app}`
+      : `📈 Ошибка участилась (${milestone}+) — ${app}`;
 
   const frame = (issue.topFrames && issue.topFrames[0]) || "—";
   const lines = [
@@ -80,7 +83,8 @@ const buildText = (issue, isNew, milestone) => {
  * @param issue  свежий документ ErrorIssue (после инкремента)
  * @param isNew  issue только что создан
  */
-const maybeAlert = async (issue, isNew) => {
+const maybeAlert = async (issue, isNew, opts = {}) => {
+  const regressed = opts.regressed === true;
   try {
     if (!isEnabled()) return { sent: false, reason: "disabled" };
     if (!process.env.TELEGRAM_BOT_TOKEN) return { sent: false, reason: "no-token" };
@@ -97,15 +101,18 @@ const maybeAlert = async (issue, isNew) => {
     const before = issue.lastAlertCount || 0;
     const milestone = crossedMilestone(before, issue.count);
 
-    if (!isNew && !milestone) return { sent: false, reason: "no-trigger" };
+    if (!isNew && !milestone && !regressed) return { sent: false, reason: "no-trigger" };
 
-    if (!isNew && issue.lastAlertAt && Date.now() - issue.lastAlertAt.getTime() < cooldownMs()) {
+    // Регресс пробивает кулдаун: «закрытая ошибка вернулась» — это событие,
+    // которое нельзя проглотить из-за таймера от прошлой жизни issue.
+    if (!isNew && !regressed && issue.lastAlertAt &&
+        Date.now() - issue.lastAlertAt.getTime() < cooldownMs()) {
       return { sent: false, reason: "cooldown" };
     }
 
     if (globalBudgetLeft() <= 0) return { sent: false, reason: "hourly-cap" };
 
-    const result = await sendMessage(ids, buildText(issue, isNew, milestone));
+    const result = await sendMessage(ids, buildText(issue, isNew, milestone, regressed));
     sentTimestamps.push(Date.now());
 
     // Отмечаем факт попытки независимо от исхода: иначе при недоступном

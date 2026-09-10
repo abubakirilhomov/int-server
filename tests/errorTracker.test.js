@@ -361,6 +361,47 @@ describe("алерты в Telegram", () => {
     delete process.env.ERROR_ALERT_MAX_PER_HOUR;
   });
 
+  test("закрытая ошибка вернулась — issue переоткрывается и алерт уходит", async () => {
+    // Без этого "resolved" работает как ловушка: алерты закрытые issue глушат,
+    // и регресс молча копил бы счётчик, о котором никто не узнает.
+    await trackAndFlush(report());
+    await ErrorIssue.updateOne({}, { $set: { status: "resolved", resolvedAt: new Date() } });
+    mockSendMessage.mockClear();
+
+    await trackAndFlush(report());
+
+    const issue = await ErrorIssue.findOne().lean();
+    expect(issue.status).toBe("new");
+    expect(issue.regressedAt).toBeTruthy();
+    expect(issue.resolvedAt).toBeNull();
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendMessage.mock.calls[0][1]).toContain("вернулась");
+  });
+
+  test("регресс пробивает кулдаун от прошлой жизни issue", async () => {
+    await trackAndFlush(report());
+    await ErrorIssue.updateOne({}, {
+      $set: { status: "resolved", lastAlertAt: new Date(), lastAlertCount: 1 },
+    });
+    mockSendMessage.mockClear();
+
+    await trackAndFlush(report());
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("заигноренный НЕ переоткрывается — в том и смысл игнора", async () => {
+    await trackAndFlush(report());
+    await ErrorIssue.updateOne({}, { $set: { status: "ignored" } });
+    mockSendMessage.mockClear();
+
+    await trackAndFlush(report(), report());
+
+    const issue = await ErrorIssue.findOne().lean();
+    expect(issue.status).toBe("ignored");
+    expect(issue.count).toBe(3); // счётчик всё равно растёт
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
   test("заигноренный issue молчит", async () => {
     await trackAndFlush(report());
     await ErrorIssue.updateOne({}, { $set: { status: "ignored" } });

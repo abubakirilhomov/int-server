@@ -41,6 +41,21 @@ router.post(
   "/",
   limiter,
   express.json({ limit: bodyLimit }),
+  // navigator.sendBeacon не умеет ставить заголовки: с application/json он
+  // упирается в preflight, которого не переживает, поэтому шлёт text/plain.
+  // Без этой строки beacon-путь молча не доставляет — а это единственный путь
+  // в браузерах без fetch(keepalive) и при закрытии вкладки.
+  express.text({ type: "text/plain", limit: bodyLimit }),
+  (req, res, next) => {
+    if (typeof req.body === "string") {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        return res.status(400).json({ error: "INVALID_JSON" });
+      }
+    }
+    next();
+  },
   errorReportCtrl.ingest
 );
 

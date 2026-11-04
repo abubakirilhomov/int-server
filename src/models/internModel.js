@@ -253,6 +253,14 @@ const internSchema = new mongoose.Schema({
     // Когда стал restricted — для UI "вы в блоке N дней".
     restrictedSince: { type: Date, default: null },
 
+    // Сколько раз всего (за всё время) интерн попадал в restricted/admin_block.
+    // Растёт только на переходах В блок (ok→restricted, restricted→admin_block),
+    // не на каждой неделе пока там сидит. Используется для: (1) штрафа к
+    // рейтингу (см. penaltyUtils.computeWeeklyPlanBlockDeduction), (2) запрета
+    // повышения грейда пока blockCount >= 2 и status !== "ok" (см.
+    // internService.upgradeInternGrade).
+    blockCount: { type: Number, default: 0 },
+
     // История самостоятельных активаций. Счётчик "2/месяц" вычисляется
     // фильтром по activatedAt в текущем календарном месяце.
     selfActivations: [

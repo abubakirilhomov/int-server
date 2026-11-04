@@ -13,6 +13,19 @@ const SEVERITY_ORDER = ["green", "yellow", "red", "black"];
 // Grade order (pastdan yuqoriga) — daraja pasaytirish uchun ishlatiladi.
 const GRADE_ORDER = ["junior", "strongJunior", "middle", "strongMiddle", "senior"];
 
+// Har bir weeklyPlan bloki (restricted/admin_block holatiga tushish) uchun
+// reytingdan ayiriladigan ball — "yellow" shtrafi bilan bir xil og'irlikda.
+const WEEKLY_PLAN_BLOCK_WEIGHT = PENALTY_WEIGHTS.yellow;
+
+// Necha marta bloklangan bo'lsa (intern.weeklyPlan.blockCount) shunga qarab
+// reytingdan ayiriladigan umumiy ball. Rating hisoblanadigan har ikki joyda
+// (getRatings, getInternsRating) bir xil formuladan foydalanish uchun shu
+// yerda markazlashtirilgan.
+function computeWeeklyPlanBlockDeduction(intern) {
+  const blockCount = intern?.weeklyPlan?.blockCount || 0;
+  return +(blockCount * WEEKLY_PLAN_BLOCK_WEIGHT).toFixed(2);
+}
+
 // Shtraf turiga qarab darajani pasaytiradi (red → -1, black → -2).
 // Minimal daraja — junior. Yangi daraja oldingisidan past bo'lmasa null qaytaradi.
 function demoteGrade(grade, steps = 0) {
@@ -64,4 +77,13 @@ function buildRuleMap(rules = []) {
   return map;
 }
 
-module.exports = { computePenalties, buildRuleMap, PENALTY_WEIGHTS, SEVERITY_ORDER, GRADE_ORDER, demoteGrade };
+module.exports = {
+  computePenalties,
+  buildRuleMap,
+  PENALTY_WEIGHTS,
+  SEVERITY_ORDER,
+  GRADE_ORDER,
+  demoteGrade,
+  WEEKLY_PLAN_BLOCK_WEIGHT,
+  computeWeeklyPlanBlockDeduction,
+};

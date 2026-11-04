@@ -8,7 +8,20 @@ const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const isAdminUser = require("../utils/isAdminUser");
-const { computePenalties, buildRuleMap, PENALTY_WEIGHTS, demoteGrade } = require("../utils/penaltyUtils");
+const {
+    computePenalties,
+    buildRuleMap,
+    PENALTY_WEIGHTS,
+    GRADE_ORDER,
+    demoteGrade,
+    computeWeeklyPlanBlockDeduction,
+} = require("../utils/penaltyUtils");
+
+// Grade-up uchun taqiq: intern umrida shuncha marta (yoki undan ko'p)
+// weeklyPlan bo'yicha restricted/admin_block'ga tushgan bo'lsa VA hozir ham
+// "ok" holatida bo'lmasa, admin uni yuqori darajaga o'tkaza olmaydi — toki
+// keyingi "ok" hafta kelmaguncha (qarang: upgradeInternGrade).
+const GRADE_UP_BLOCK_THRESHOLD = 2;
 const BADGE_DEFINITIONS = require("../config/badges");
 
 const BADGE_POINTS_BY_KEY = BADGE_DEFINITIONS.reduce((map, def) => {
@@ -223,8 +236,13 @@ class InternService {
 
             // 🔹 Shtrafga ta'sir: har bir categoriyaga qarab reytingdan ayirish.
             const penaltyInfo = computePenalties(intern.violations || [], ruleMap);
+            // 🔹 Haftalik plan bloklari (restricted/admin_block) uchun qo'shimcha jarima.
+            const blockDeduction = computeWeeklyPlanBlockDeduction(intern);
 
-            const adjustedRatingScore = Math.max(0, ratingScore - penaltyInfo.totalDeduction);
+            const adjustedRatingScore = Math.max(
+                0,
+                ratingScore - penaltyInfo.totalDeduction - blockDeduction
+            );
 
             // Distinct branch names — used so a multi-branch intern is counted
             // once per branch in the branch leaderboard below, instead of being
@@ -1104,6 +1122,21 @@ class InternService {
         const gradeConfig = grades[normalizedGrade];
         const oldGrade = intern.grade;
 
+        // 🚫 Grade-up taqiqi: ko'p marta weeklyPlan bloki (restricted/admin_block)
+        // bo'lgan va hali "ok" haftaga qaytmagan intern yuqoriga ko'tarilmaydi.
+        // Pasaytirish (demote) bu tekshiruvga tushmaydi.
+        const oldIdx = GRADE_ORDER.indexOf(oldGrade);
+        const newIdx = GRADE_ORDER.indexOf(normalizedGrade);
+        const isUpgrade = newIdx > oldIdx;
+        const blockCount = intern.weeklyPlan?.blockCount || 0;
+        const weeklyStatus = intern.weeklyPlan?.status || "ok";
+        if (isUpgrade && blockCount >= GRADE_UP_BLOCK_THRESHOLD && weeklyStatus !== "ok") {
+            throw new AppError(
+                `Daraja oshirilmaydi: stajyor ${blockCount} marta haftalik plan bo'yicha blokka tushgan va hozir "${weeklyStatus}" holatida. Avval "ok" haftaga qaytishi kerak.`,
+                400
+            );
+        }
+
         // 🎁 Сохраняем в историю повышений
         intern.promotionHistory.push({
             date: new Date(),
@@ -1335,8 +1368,13 @@ class InternService {
 
             // umumiy reyting formulasi (raw: 0–5)
             const rating = intern.score * 0.7 + attendance * 5 * 0.3;
+            // 🔹 Haftalik plan bloklari (restricted/admin_block) uchun qo'shimcha jarima.
+            const blockDeduction = computeWeeklyPlanBlockDeduction(intern);
 
-            const adjustedRating = Math.max(0, rating - penaltyInfo.totalDeduction);
+            const adjustedRating = Math.max(
+                0,
+                rating - penaltyInfo.totalDeduction - blockDeduction
+            );
 
             return {
                 _id: intern._id,

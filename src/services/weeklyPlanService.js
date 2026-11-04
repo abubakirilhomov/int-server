@@ -143,6 +143,17 @@ async function evaluateWeeklyPlans({
       }
     }
 
+    // Blokka YANGI tushganda (ok→restricted yoki restricted→admin_block)
+    // lifetime hisoblagichni oshiramiz — qolganda (hali ham shu holatda)
+    // emas. Shu hisoblagich reyting jarimasi va grade-up taqiqi uchun
+    // ishlatiladi (qarang: penaltyUtils.js, internService.upgradeInternGrade).
+    if (
+      newStatus !== prevStatus &&
+      (newStatus === "restricted" || newStatus === "admin_block")
+    ) {
+      wp.blockCount = (wp.blockCount || 0) + 1;
+    }
+
     wp.status = newStatus;
     wp.lastEvaluatedAt = now;
     wp.currentWeekStartAt = currentWeekStartAt;
@@ -295,6 +306,7 @@ async function getWeeklyPlanView(intern, now = new Date()) {
     longestStreakWeeks: wp.longestStreakWeeks || 0,
     lastEvaluatedAt: wp.lastEvaluatedAt || null,
     restrictedSince: wp.restrictedSince || null,
+    blockCount: wp.blockCount || 0,
 
     // Текущая неделя — для индикатора и at_risk.
     currentWeekStartAt: currentWeekStart,

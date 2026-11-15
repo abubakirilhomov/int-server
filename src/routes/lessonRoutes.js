@@ -18,6 +18,7 @@ router.patch("/rate", internCtrl.rateIntern);
 router.patch("/:id/intern-feedback", lessonCtrl.submitInternFeedback);
 router.post("/:id/force-feedback", isAdmin, lessonCtrl.forceCloseInternFeedback);
 router.get("/:id", lessonCtrl.getLessonById);
+router.patch("/:id", lessonCtrl.editOwnLesson);
 router.put("/:id", isAdmin, lessonCtrl.updateLesson);
 router.delete("/:id", isAdmin, lessonCtrl.deleteLesson);
 

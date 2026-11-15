@@ -12,6 +12,7 @@ router.get("/", lessonCtrl.getLessons);
 router.get("/attendance-stats", lessonCtrl.getAttendanceStats);
 router.get("/pending", lessonCtrl.getPendingLessons);
 router.get("/pending-feedback", lessonCtrl.getPendingFeedback);
+router.get("/my-history", lessonCtrl.getMyLessonHistory);
 router.get("/stuck-feedbacks", isAdmin, lessonCtrl.getStuckFeedbacks);
 router.patch("/rate", internCtrl.rateIntern);
 router.patch("/:id/intern-feedback", lessonCtrl.submitInternFeedback);

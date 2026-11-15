@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
+const Mentor = require("../models/mentorModel");
 const LessonCriteria = require("../models/lessonCriteriaModel");
 const grades = require("../config/grades.js");
 const GradeConfig = require("../models/gradeConfigModel");
@@ -44,6 +45,20 @@ const feedbackWindowStart = () =>
 // so both directions are capped.
 const LESSON_TIME_MAX_FUTURE_MS = 15 * 60 * 1000;
 const LESSON_TIME_MAX_PAST_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Разбор и проверка окна времени урока — общая для создания и правки урока.
+function checkLessonTime(timeStr) {
+  const date = tashkentWallClockToDate(timeStr);
+  if (!date) return { error: "Неверный формат времени урока." };
+  const skewMs = date.getTime() - Date.now();
+  if (skewMs > LESSON_TIME_MAX_FUTURE_MS) {
+    return { error: "Урок нельзя логировать заранее — время ещё не наступило." };
+  }
+  if (-skewMs > LESSON_TIME_MAX_PAST_MS) {
+    return { error: "Урок слишком старый для добавления. Обратитесь к администратору." };
+  }
+  return { date };
+}
 
 exports.createLesson = catchAsync(async (req, res) => {
   // Whitelist: the client supplies which lesson happened, when, with whom,
@@ -117,18 +132,11 @@ exports.createLesson = catchAsync(async (req, res) => {
   // default модели `date: Date.now`, из-за чего уроки утекали в соседний
   // месяц (особенно залогированные у полуночи / с бэкдейтом), а анти-дубль
   // ниже (завязанный на payload.date) никогда не выполнялся.
-  const derivedDate = tashkentWallClockToDate(payload.time);
-  if (!derivedDate) {
-    return res.status(400).json({ message: "Неверный формат времени урока." });
+  const timeCheck = checkLessonTime(payload.time);
+  if (timeCheck.error) {
+    return res.status(400).json({ message: timeCheck.error });
   }
-  const skewMs = derivedDate.getTime() - Date.now();
-  if (skewMs > LESSON_TIME_MAX_FUTURE_MS) {
-    return res.status(400).json({ message: "Урок нельзя логировать заранее — время ещё не наступило." });
-  }
-  if (-skewMs > LESSON_TIME_MAX_PAST_MS) {
-    return res.status(400).json({ message: "Урок слишком старый для добавления. Обратитесь к администратору." });
-  }
-  payload.date = derivedDate;
+  payload.date = timeCheck.date;
 
   // Ловим только ТОЧНЫЙ дубль (случайный двойной сабмит): тот же интерн +
   // ментор + то же самое время урока. Дневную дедупликацию НЕ делаем — интерн
@@ -208,6 +216,135 @@ exports.getLessons = catchAsync(async (req, res) => {
     .populate("intern", "name lastName")
     .populate("mentor", "name lastName");
   res.json(lessons);
+});
+
+// PATCH /api/lessons/:id — интерн правит СВОЙ урок, пока ментор его не
+// подтвердил. Менять можно только то, что интерн вводит при создании;
+// status/оценки/служебные поля — нет. Владелец берётся из токена, а условие
+// `status: "pending"` стоит в самом update-запросе: если ментор подтвердил урок
+// в ту же секунду, запись не пройдёт (409), а не перезапишет подтверждённый урок.
+// Ментор видит pending по `Lesson.mentor` (getPendingLessons / mentorService),
+// поэтому при смене ментора урок сам уходит на подтверждение новому ментору.
+const INTERN_EDITABLE_FIELDS = ["topic", "time", "group", "mentor", "feedback"];
+const LESSON_FEEDBACK_EMOJI = ["🔥", "👍", "😐", "👎"];
+
+exports.editOwnLesson = catchAsync(async (req, res) => {
+  if (req.user?.role !== "intern") {
+    return res.status(403).json({ message: "Darsni faqat uni qo'shgan intern tahrirlay oladi" });
+  }
+  const internId = String(req.user.id || req.user._id);
+  const body = req.body || {};
+
+  const forbidden = Object.keys(body).filter((k) => !INTERN_EDITABLE_FIELDS.includes(k));
+  if (forbidden.length) {
+    return res.status(400).json({
+      message: `Bu maydonlarni o'zgartirib bo'lmaydi: ${forbidden.join(", ")}`,
+    });
+  }
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ message: "Dars topilmadi" });
+  }
+
+  const $set = {};
+  const $unset = {};
+  for (const key of ["topic", "group"]) {
+    if (body[key] === undefined) continue;
+    const v = typeof body[key] === "string" ? body[key].trim() : "";
+    if (!v) return res.status(400).json({ message: "Mavzu va guruh bo'sh bo'lmasligi kerak" });
+    $set[key] = v;
+  }
+  if (body.feedback !== undefined) {
+    if (body.feedback === "" || body.feedback === null) $unset.feedback = 1;
+    else if (LESSON_FEEDBACK_EMOJI.includes(body.feedback)) $set.feedback = body.feedback;
+    else return res.status(400).json({ message: "Noto'g'ri baho" });
+  }
+  if (body.mentor !== undefined) {
+    if (!mongoose.isValidObjectId(body.mentor)) {
+      return res.status(400).json({ message: "Mentor topilmadi" });
+    }
+    const mentorExists = await Mentor.exists({ _id: body.mentor });
+    if (!mentorExists) return res.status(400).json({ message: "Mentor topilmadi" });
+  }
+
+  const lesson = await Lesson.findById(req.params.id).lean();
+  if (!lesson) return res.status(404).json({ message: "Dars topilmadi" });
+  if (String(lesson.intern) !== internId) {
+    return res.status(403).json({ message: "Bu dars sizniki emas" });
+  }
+  if (lesson.status !== "pending") {
+    return res.status(409).json({
+      message: "Dars mentor tomonidan tasdiqlangan — endi uni tahrirlab bo'lmaydi",
+    });
+  }
+
+  const mentorChanged =
+    body.mentor !== undefined && String(body.mentor) !== String(lesson.mentor);
+  if (mentorChanged) $set.mentor = body.mentor;
+
+  // Время перепроверяем только если его меняют: правка темы у урока
+  // недельной давности не должна упираться в окно добавления.
+  let dateChanged = false;
+  if (body.time !== undefined && body.time !== lesson.time) {
+    const timeCheck = checkLessonTime(body.time);
+    if (timeCheck.error) return res.status(400).json({ message: timeCheck.error });
+    $set.time = body.time;
+    $set.date = timeCheck.date;
+    dateChanged = timeCheck.date.getTime() !== new Date(lesson.date).getTime();
+  }
+
+  if (mentorChanged || dateChanged) {
+    const duplicate = await Lesson.findOne({
+      _id: { $ne: lesson._id },
+      intern: internId,
+      mentor: $set.mentor || lesson.mentor,
+      date: $set.date || lesson.date,
+    }).lean();
+    if (duplicate) {
+      return res.status(409).json({ message: "Bu mentor bilan shu vaqtga dars allaqachon qo'shilgan" });
+    }
+  }
+
+  const update = {};
+  if (Object.keys($set).length) update.$set = $set;
+  if (Object.keys($unset).length) update.$unset = $unset;
+  if (!Object.keys(update).length) {
+    return res.json(lesson);
+  }
+
+  const updated = await Lesson.findOneAndUpdate(
+    { _id: lesson._id, intern: internId, status: "pending" },
+    update,
+    { new: true, runValidators: true }
+  );
+  if (!updated) {
+    return res.status(409).json({
+      message: "Dars mentor tomonidan tasdiqlangan — endi uni tahrirlab bo'lmaydi",
+    });
+  }
+
+  // lessonsVisited хранит mentorId/date урока денормализованно — держим в синхроне.
+  if (mentorChanged || dateChanged) {
+    await Intern.updateOne(
+      { _id: internId, "lessonsVisited.lessonId": updated._id },
+      {
+        $set: {
+          "lessonsVisited.$.mentorId": updated.mentor,
+          "lessonsVisited.$.date": updated.date,
+        },
+      }
+    );
+  }
+
+  if (mentorChanged) {
+    sendNotificationToUser(
+      updated.mentor,
+      "mentor",
+      "🧑‍🎓 Yangi dars qo'shildi",
+      "Intern siz bilan o'tgan darsni ko'rsatdi — tasdiqlashingiz kutilmoqda."
+    ).catch(() => {});
+  }
+
+  res.json(updated);
 });
 
 // GET /api/lessons/my-history?month=YYYY-MM — история уроков, которые интерн

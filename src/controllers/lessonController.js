@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Lesson = require("../models/lessonModel.js");
 const Intern = require("../models/internModel");
 const LessonCriteria = require("../models/lessonCriteriaModel");
@@ -11,7 +12,10 @@ const { awardXP, XP_REWARDS } = require("../services/xpService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const isAdminUser = require("../utils/isAdminUser");
-const { tashkentWallClockToDate } = require("../utils/tashkentTime");
+const {
+  tashkentWallClockToDate,
+  TASHKENT_OFFSET_MS,
+} = require("../utils/tashkentTime");
 const Setting = require("../models/settingModel");
 
 const DEFAULT_LESSON_LOOKBACK_DAYS = 2;
@@ -204,6 +208,88 @@ exports.getLessons = catchAsync(async (req, res) => {
     .populate("intern", "name lastName")
     .populate("mentor", "name lastName");
   res.json(lessons);
+});
+
+// GET /api/lessons/my-history?month=YYYY-MM — история уроков, которые интерн
+// сам внёс. Интерн берётся ТОЛЬКО из токена (req.user.id), никакого id из
+// запроса — чужую историю так не получить. Месяц считается по Ташкенту.
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+
+const tashkentMonthKey = (d) =>
+  new Date(d.getTime() + TASHKENT_OFFSET_MS).toISOString().slice(0, 7);
+
+const tashkentMonthRange = (key) => {
+  const [, y, m] = key.match(MONTH_RE);
+  const start = new Date(Date.UTC(+y, +m - 1, 1) - TASHKENT_OFFSET_MS);
+  const endExclusive = new Date(Date.UTC(+y, +m, 1) - TASHKENT_OFFSET_MS);
+  return { start, endExclusive };
+};
+
+exports.getMyLessonHistory = catchAsync(async (req, res) => {
+  if (req.user?.role !== "intern") {
+    throw new AppError("Faqat intern uchun", 403);
+  }
+  const internId = req.user.id || req.user._id;
+
+  const requested = req.query.month;
+  if (requested !== undefined && !MONTH_RE.test(String(requested))) {
+    throw new AppError("month YYYY-MM formatida bo'lishi kerak", 400);
+  }
+  const month = requested ? String(requested) : tashkentMonthKey(new Date());
+  const { start, endExclusive } = tashkentMonthRange(month);
+
+  const [lessons, monthsAgg] = await Promise.all([
+    Lesson.find({ intern: internId, date: { $gte: start, $lt: endExclusive } })
+      .select("topic time date group status feedback internFeedback.score mentor createdAt")
+      .populate("mentor", "name lastName")
+      .sort({ date: -1, createdAt: -1 })
+      .lean(),
+    Lesson.aggregate([
+      { $match: { intern: new mongoose.Types.ObjectId(String(internId)) } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m", date: "$date", timezone: "+05:00" },
+          },
+          total: { $sum: 1 },
+          confirmed: {
+            $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] },
+          },
+        },
+      },
+      { $sort: { _id: -1 } },
+    ]),
+  ]);
+
+  const months = monthsAgg.map((m) => ({
+    month: m._id,
+    total: m.total,
+    confirmed: m.confirmed,
+  }));
+  const confirmed = lessons.filter((l) => l.status === "confirmed").length;
+
+  res.json({
+    month,
+    summary: {
+      total: lessons.length,
+      confirmed,
+      pending: lessons.length - confirmed,
+    },
+    months,
+    lessons: lessons.map((l) => ({
+      _id: l._id,
+      topic: l.topic,
+      group: l.group,
+      time: l.time,
+      date: l.date,
+      status: l.status,
+      feedback: l.feedback || null,
+      internScore: l.internFeedback?.score ?? null,
+      mentor: l.mentor
+        ? { _id: l.mentor._id, name: l.mentor.name, lastName: l.mentor.lastName }
+        : null,
+    })),
+  });
 });
 
 exports.getLessonById = catchAsync(async (req, res) => {

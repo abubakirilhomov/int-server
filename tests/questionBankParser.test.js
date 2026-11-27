@@ -108,3 +108,32 @@ describe("parseBank на синтетическом банке", () => {
     expect(parseBank(blocks).questions[0].contentHash).not.toBe(parsed.questions[0].contentHash);
   });
 });
+
+describe("backend-трек в docx", () => {
+  const { syntheticBackendBlocks } = require("./helpers/syntheticBank");
+  const { topicByName } = require("../src/config/questionBankTopics");
+
+  test("N/E/D/A → темы backend, набор трека backend-nodejs, квоты, заявленные количества", () => {
+    const parsed = parseBank(syntheticBackendBlocks());
+    expect(parsed.questions.map((q) => [q.code, q.topic, q.tracks])).toEqual([
+      ["N1", "node", ["backend-nodejs"]], ["E1", "express", ["backend-nodejs"]],
+      ["D1", "database", ["backend-nodejs"]], ["A1", "api", ["backend-nodejs"]],
+    ]);
+    expect(parsed.questions[3].prompt).toContain("```js\napp.get('/x', h);\n```");
+    expect(parsed.sets).toEqual([expect.objectContaining({ track: "backend-nodejs", number: 1, questionCodes: ["N1", "E1", "D1", "A1"] })]);
+    expect(parsed.rules.quotas["backend-nodejs"][4]).toEqual([
+      { topics: ["node", "express"], count: 2 }, { topics: ["database"], count: 1 }, { topics: ["api"], count: 1 },
+    ]);
+    expect(parsed.declaredCounts).toEqual({ node: 1, express: 1, database: 1, api: 1 });
+    expect(validateBank(parsed)).toEqual({ errors: [], warnings: [] });
+  });
+
+  test("названия тем: точное и по началу", () => {
+    expect(topicByName("Tailwind CSS (v3)")).toBe("tailwind");
+    expect(topicByName("Tailwind CSS (v3)", { exact: true })).toBe(null);
+    expect(topicByName("Ma’lumotlar bazasi", { exact: true })).toBe("database");
+    expect(topicByName("Node.js")).toBe("node");
+    expect(topicByName("React hooks", { exact: true })).toBe(null);
+    expect(topicByName("Jami")).toBe(null);
+  });
+});

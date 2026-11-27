@@ -67,6 +67,7 @@ describe("toCandidateSession", () => {
     expect(out).toEqual({
       status: "live",
       rev: 7,
+      language: "uz",
       current: 2,
       questions: [
         { position: 1, prompt: "Yopilgan savol", answerKind: "text", state: "closed" },
@@ -84,6 +85,62 @@ describe("toCandidateSession", () => {
 
   test("aborted показывается кандидату как finished; нет открытых → current null", () => {
     const out = toCandidateSession({ status: "aborted", rev: 1, questions: [] });
-    expect(out).toEqual({ status: "finished", rev: 1, current: null, questions: [] });
+    expect(out).toEqual({ status: "finished", rev: 1, language: "uz", current: null, questions: [] });
+  });
+});
+
+describe("язык кандидата (uz | ru, fallback uz)", () => {
+  const bilingual = {
+    ...bankDoc,
+    answerKind: "choice",
+    sandbox: undefined,
+    promptRu: "Синтетический вопрос: напишите функцию.",
+    promptShortRu: "кратко",
+    expectedAnswerRu: "СЕКРЕТ синтетический ответ",
+    options: [
+      { key: "A", text: "Birinchi", textRu: "Первый", correct: true },
+      { key: "B", text: "Ikkinchi", textRu: "", correct: false },
+    ],
+  };
+
+  test("ru → русский текст; вариант без перевода — на uz; верный вариант не виден", () => {
+    const out = toCandidateQuestion(bilingual, 1, "ru");
+    expect(out).toEqual({
+      position: 1,
+      prompt: "Синтетический вопрос: напишите функцию.",
+      answerKind: "choice",
+      options: [{ key: "A", text: "Первый" }, { key: "B", text: "Ikkinchi" }],
+    });
+    const keys = deepKeys(out);
+    [...SECRET_FIELDS, "correct", "expectedAnswerRu", "promptShortRu", "textRu", "promptRu"].forEach((f) => expect(keys.has(f)).toBe(false));
+    expect(JSON.stringify(out)).not.toMatch(/СЕКРЕТ|MAXFIY|кратко/);
+  });
+
+  test("uz, без языка и неизвестный язык → узбекский", () => {
+    for (const lang of ["uz", undefined, "en", "RU-xx"]) {
+      expect(toCandidateQuestion(bilingual, 1, lang).prompt).toBe("Sintetik savol: funksiya yozing.");
+    }
+    expect(toCandidateQuestion(bilingual, 1, "RU").prompt).toBe("Синтетический вопрос: напишите функцию.");
+  });
+
+  test("ru, но перевода нет (пусто/пробелы) → узбекский", () => {
+    expect(toCandidateQuestion({ ...bankDoc, promptRu: "  " }, 1, "ru").prompt).toBe("Sintetik savol: funksiya yozing.");
+  });
+
+  test("сессия: язык сессии по умолчанию, явный язык запроса важнее", () => {
+    const session = {
+      status: "live", rev: 2, language: "ru",
+      questions: [
+        { code: "H1", order: 0, prompt: "Ochiq", promptRu: "Открытый", state: "open", openedAt: new Date() },
+        { code: "J1", order: 1, prompt: "YASHIRIN", promptRu: "СКРЫТЫЙ", state: "hidden" },
+      ],
+    };
+    const ru = toCandidateSession(session);
+    expect(ru.language).toBe("ru");
+    expect(ru.questions[0].prompt).toBe("Открытый");
+    expect(JSON.stringify(ru)).not.toMatch(/СКРЫТЫЙ|YASHIRIN/);
+    const uz = toCandidateSession(session, "uz");
+    expect(uz.language).toBe("uz");
+    expect(uz.questions[0].prompt).toBe("Ochiq");
   });
 });

@@ -1,22 +1,22 @@
 // Живые собеседования кандидатов — настройки по умолчанию.
 // План: docs/2026-11-27-candidate-interviews-plan.md (в монорепо interns-system).
 //
-// Абубакир 27.11 одобрил план, но на вопросы §9 не ответил — до ответа
-// действуют эти значения. Меняются без деплоя: Setting с ключом
+// Ответы Абубакира на §9 плана — 27.11. Меняются без деплоя: Setting с ключом
 // "candidateInterviewSettings" (PATCH /api/settings) перекрывает поля ниже.
 const Setting = require("../models/settingModel");
+const { BANK_TRACKS, LANGUAGES, DEFAULT_LANGUAGE } = require("./questionBankTopics");
 
 const DEFAULTS = Object.freeze({
-  // §9.1 Формат смешанный: кандидат рядом или по Zoom. Сигналы фокуса и
-  // вставки пишем в сессию, вставку не запрещаем.
+  // §9.1 Кандидат обычно сидит рядом, иногда подключается по Google Meet.
+  // Сигналы фокуса и вставки пишем в сессию, вставку не запрещаем.
   format: "mixed",
   recordSignals: true,
   blockPaste: false,
 
-  // §9.2 Вес вопроса по уровню. Порог и доля за «частично» — null → берутся
-  // из текущего процесса (Setting interviewSettings: passThreshold 80, partialCredit 0.5).
-  levelWeights: { oson: 1, orta: 2, qiyin: 3 },
-  passThreshold: null,
+  // §9.2 Все вопросы весят одинаково, порог прохождения 80%.
+  // Доля за «частично» — null → из текущего процесса (interviewSettings, 0.5).
+  levelWeights: { oson: 1, orta: 1, qiyin: 1 },
+  passThreshold: 80,
   partialCredit: null,
 
   // §9.3 Проводят только админы (isAdmin), как текущие /api/interviews.
@@ -26,17 +26,20 @@ const DEFAULTS = Object.freeze({
   accessWindow: { beforeMinutes: 30, afterMinutes: 180 },
   revokeOnFinish: true,
 
-  // §9.5 Банк — только фронтенд-треки; backend-nodejs остаётся на старом чек-листе.
-  bankTracks: ["frontend-react", "frontend-vue"],
+  // §9.5 Банк ведётся для всех трёх треков; банк backend-nodejs пополняется.
+  // Пока у трека нет активных наборов — старый чек-лист (services/candidateInterviewMode).
+  bankTracks: [...BANK_TRACKS],
 
-  // §9.6 Язык вопросов — только узбекский.
-  language: "uz",
+  // §9.6 Вопросы на двух языках. Кандидат получает выбранный, при пустом
+  // переводе — узбекский.
+  languages: [...LANGUAGES],
+  defaultLanguage: DEFAULT_LANGUAGE,
 
   // §9.7 Домен кандидатского приложения — пока *.vercel.app (CANDIDATE_APP_URL).
   candidateAppUrl: process.env.CANDIDATE_APP_URL || "",
 
-  // §9.8 Песочница React/Vue (Sandpack или своя) — решение на этапе 5.
-  sandboxProvider: null,
+  // §9.8 Интернет в филиалах есть всегда — Sandpack (бандлер CodeSandbox) допустим.
+  sandboxProvider: "sandpack",
 
   // Набор по умолчанию: 18 вопросов; не повторять наборы последних N собеседований трека.
   defaultSetSize: 18,

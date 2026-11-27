@@ -59,21 +59,15 @@ function computeScore(items, topicsById, opts = {}) {
 
 // Живой режим: оценка по вопросам банка (снимки InterviewSession.questions).
 // items: [{ code, promptShort, topic, level, result: pass|partial|fail|null, note }]
-// opts: { levelWeights, partialCredit, threshold }. Неоценённые (result=null)
+// opts: { levelWeights, partialCredit, threshold }. По умолчанию все вопросы
+// весят одинаково (§9.2, 27.11) — веса из config/candidateInterviews. Неоценённые (result=null)
 // не входят в знаменатель — интервьюер видит их число в `unrated`.
 // Roadmap — темы проваленных вопросов (без текста: банк конфиденциален,
 // а roadmap уходит кандидату в письме).
-const TOPIC_LABELS = {
-  html: { uz: "HTML", ru: "HTML" },
-  css: { uz: "CSS", ru: "CSS" },
-  js: { uz: "JavaScript", ru: "JavaScript" },
-  react: { uz: "React", ru: "React" },
-  vue: { uz: "Vue", ru: "Vue" },
-  tailwind: { uz: "Tailwind CSS", ru: "Tailwind CSS" },
-};
+const { TOPIC_LABELS } = require("../config/questionBankTopics");
 
 function computeQuestionScore(items, opts = {}) {
-  const weights = opts.levelWeights || { oson: 1, orta: 2, qiyin: 3 };
+  const weights = opts.levelWeights || { oson: 1, orta: 1, qiyin: 1 };
   const partialCredit = Number(opts.partialCredit ?? 0.5);
   const threshold = Number(opts.threshold ?? 80);
 

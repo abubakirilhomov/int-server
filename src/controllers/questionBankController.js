@@ -3,6 +3,9 @@
 const BankQuestion = require("../models/bankQuestionModel");
 const InterviewSet = require("../models/interviewSetModel");
 const catchAsync = require("../utils/catchAsync");
+const { translationStatus } = require("../utils/questionBank/i18n");
+const { translationStats } = require("../services/questionTranslations");
+const { interviewModes } = require("../services/candidateInterviewMode");
 
 exports.listQuestions = catchAsync(async (req, res) => {
   const filter = {};
@@ -11,9 +14,10 @@ exports.listQuestions = catchAsync(async (req, res) => {
   if (req.query.level) filter.level = String(req.query.level);
   if (req.query.active !== "all") filter.isActive = true;
   const questions = await BankQuestion.find(filter)
-    .select("+expectedAnswer")
+    .select("+expectedAnswer +expectedAnswerRu +options.correct")
     .sort({ topic: 1, order: 1 })
     .lean();
+  questions.forEach((q) => { q.ruStatus = translationStatus(q); });
   res.json({ count: questions.length, questions });
 });
 
@@ -26,7 +30,7 @@ exports.listSets = catchAsync(async (req, res) => {
 
 // Сводка без текста вопросов — для смоков и дашборда.
 exports.stats = catchAsync(async (req, res) => {
-  const [byTopic, sets] = await Promise.all([
+  const [byTopic, sets, translations, modes] = await Promise.all([
     BankQuestion.aggregate([
       { $match: { isActive: true } },
       { $group: { _id: "$topic", count: { $sum: 1 }, practical: { $sum: { $cond: ["$isPractical", 1, 0] } } } },
@@ -35,6 +39,8 @@ exports.stats = catchAsync(async (req, res) => {
       { $match: { isActive: true } },
       { $group: { _id: { track: "$track", size: "$size" }, count: { $sum: 1 } } },
     ]),
+    translationStats(),
+    interviewModes(),
   ]);
   const topics = Object.fromEntries(byTopic.map((t) => [t._id, t.count]));
   res.json({
@@ -42,5 +48,7 @@ exports.stats = catchAsync(async (req, res) => {
     practical: byTopic.reduce((s, t) => s + t.practical, 0),
     topics,
     sets: sets.map((s) => ({ track: s._id.track, size: s._id.size, count: s.count })),
+    translations, // { ok, stale, missing } — русский перевод
+    modes, // трек → "live" (есть наборы) | "checklist"
   });
 });

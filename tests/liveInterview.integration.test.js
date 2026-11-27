@@ -558,4 +558,25 @@ describe("этап 3: пересдача, пересечения, страниц
     expect((await api("GET", "/api/interviews/live/sets/overview", { token: adminToken })).status).toBe(400);
     expect((await api("GET", "/api/interviews/live/sets/overview?track=frontend-react", { token: mentorToken })).status).toBe(403);
   });
+
+  test("архив набора: в ротацию не идёт, история «кому достался» остаётся", async () => {
+    const set1 = await InterviewSet.findOne({ track: "frontend-react", number: 1 });
+    await InterviewSet.updateOne({ _id: set1._id }, { isActive: false });
+    try {
+      const o = (await api("GET", "/api/interviews/live/sets/overview?track=frontend-react&recent=5", { token: adminToken })).body;
+      expect(o.sets.find((s) => s.number === 1)).toBeUndefined();
+      const arch = o.archived.find((s) => s.number === 1);
+      expect(arch.isActive).toBe(false);
+      expect(arch.usedCount).toBeGreaterThanOrEqual(1);
+      expect(arch.uses[0].candidate).toContain("Retake");
+      expect(o.recent.items.some((it) => it.setNumber === 1)).toBe(true);
+      const live = (await api("GET", "/api/interviews/live/sets?track=frontend-react", { token: adminToken })).body;
+      expect(live.sets.map((s) => s.number)).not.toContain(1);
+      expect(String(live.suggestedSetId)).not.toBe(String(set1._id));
+      const hist = (await api("GET", "/api/interviews/live/history?track=frontend-react", { token: adminToken })).body;
+      expect(hist.items.some((h) => h.set && h.set.number === 1)).toBe(true);
+    } finally {
+      await InterviewSet.updateOne({ _id: set1._id }, { isActive: true });
+    }
+  });
 });

@@ -459,7 +459,18 @@ exports.finish = catchAsync(async (req, res) => {
     cooldownUntil: interview.cooldownUntil,
     threshold: cfg.passThreshold,
   });
-  res.json(await buildView(session._id, { result: { closedOpen: openCodes, unrated: result.unrated }, letter }));
+  // Итог собеседования — прямо в ответе: экрану «Результат» не нужен отдельный
+  // GET /interviews/:id (на Render это лишние секунды после finish).
+  const outcome = {
+    _id: interview._id,
+    percentage: interview.percentage,
+    scoreEarned: interview.scoreEarned,
+    scoreTotal: interview.scoreTotal,
+    passed: interview.passed,
+    cooldownUntil: interview.cooldownUntil,
+    application: app ? { _id: app._id } : null,
+  };
+  res.json(await buildView(session._id, { result: { closedOpen: openCodes, unrated: result.unrated, interview: outcome }, letter }));
 });
 
 // Отмена / неявка собеседования — доступ отзывается, сессия прерывается.

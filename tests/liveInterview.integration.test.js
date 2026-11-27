@@ -377,6 +377,11 @@ describe("полный цикл живого собеседования", () => 
     expect(r.body.status).toBe("finished");
     expect(r.body.access.status).toBe("revoked");
     expect(r.body.letter.uz).toContain("CSS");
+    // Итог — в ответе finish (экран «Результат» без отдельного GET /interviews/:id)
+    expect(r.body.result.interview).toMatchObject({ percentage: 40, scoreEarned: 2, scoreTotal: 5, passed: false });
+    expect(String(r.body.result.interview._id)).toBe(String(ivA._id));
+    expect(r.body.result.interview.application._id).toBeTruthy();
+    expect(r.body.result.interview.cooldownUntil).toBeTruthy();
 
     const iv = await Interview.findById(ivA._id).lean();
     expect(iv).toMatchObject({ status: "completed", mode: "live", percentage: 40, passed: false, scoreEarned: 2, scoreTotal: 5 });

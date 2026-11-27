@@ -79,10 +79,12 @@ describe("toCandidateSession", () => {
 
   test("редактор по треку: web / js / jsx / vue / html / node; не код → нет поля", () => {
     const ed = (code, answerKind = "code", sandbox) => toCandidateQuestion({ code, prompt: "x", answerKind, sandbox }, 1).editor;
-    expect(["H1", "C1", "J1", "R1", "V1", "T1", "N1", "A1"].map((c) => ed(c))).toEqual(["web", "web", "js", "jsx", "vue", "html", "node", "node"]);
+    expect(["H1", "C1", "J1", "R1", "V1", "T1", "N1", "A1"].map((c) => ed(c))).toEqual(["web", "web", "js", "jsx", "vue", "tailwind", "node", "node"]);
     expect(ed("J1", "text")).toBeUndefined();
     expect(ed("J1", "choice")).toBeUndefined();
     expect(ed("C1", "sandbox", { template: "vanilla" })).toBe("js");
+    expect(ed("T1", "code", { template: "vue-tailwind" })).toBe("tailwind");
+    expect(ed("R1", "sandbox", { template: "react" })).toBe("jsx");
   });
 
   test("заглушка заморозки (пустой ответ без черновика) — как «ответа нет»", () => {

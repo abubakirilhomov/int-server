@@ -2,25 +2,16 @@
 // Формат файла: «mars-intern-savollar-bank» (27.11.2026). Само содержимое
 // банка в репозитории не хранится — тесты используют синтетические блоки.
 const crypto = require("crypto");
+const { PREFIX, CODE_LANG, PREFIX_CHARS, CODE_PATTERN, APOS, topicByName } = require("../../config/questionBankTopics");
 
-const PREFIX = {
-  H: { topic: "html", tracks: ["frontend-react", "frontend-vue"] },
-  C: { topic: "css", tracks: ["frontend-react", "frontend-vue"] },
-  J: { topic: "js", tracks: ["frontend-react", "frontend-vue"] },
-  R: { topic: "react", tracks: ["frontend-react"] },
-  V: { topic: "vue", tracks: ["frontend-vue"] },
-  T: { topic: "tailwind", tracks: ["frontend-vue"] },
-};
-const CODE_LANG = { H: "html", C: "css", J: "js", R: "jsx", V: "vue", T: "html" };
-
-const APOS = "['’ʻ`]";
 const LEVEL_RE = new RegExp(`^(oson|o${APOS}rta|qiyin)$`, "i");
 const Q_HEADER_RE = new RegExp(
-  `^([HCJRVT])(\\d{1,3})\\.\\s*\\[\\s*(oson|o${APOS}rta|qiyin)\\s*(?:·\\s*(amaliy))?\\s*\\]\\s*([\\s\\S]*)$`,
+  `^([${PREFIX_CHARS}])(\\d{1,3})\\.\\s*\\[\\s*(oson|o${APOS}rta|qiyin)\\s*(?:·\\s*(amaliy))?\\s*\\]\\s*([\\s\\S]*)$`,
   "i"
 );
 const ANSWER_RE = /^Javob\s*\(chernovik\)\s*:\s*/i;
-const CODE_RE = /\b[HCJRVT]\d{1,3}\b/g;
+const CODE_RE = new RegExp(`\\b${CODE_PATTERN}\\b`, "g");
+const SET_CODE_RE = new RegExp(`^${CODE_PATTERN}$`);
 
 const normLevel = (s) => (/^o.rta$/i.test(s) ? "orta" : s.toLowerCase());
 const isHeading = (b) => b.type === "p" && /^Heading/i.test(b.style || "");
@@ -43,22 +34,20 @@ function toMarkdown(parts, lang) {
   return out.join("\n\n");
 }
 
+// 1-yo'nalish — React, 2-yo'nalish — Vue (банк 27.11); 3-yo'nalish или
+// раздел с «Backend»/«Node» в названии — backend-nodejs (банк пополняется).
 function trackOfSection(text) {
+  if (/backend|node\.?js/i.test(text) || /3-yo.nalish/i.test(text)) return "backend-nodejs";
   if (/1-yo.nalish/i.test(text)) return "frontend-react";
   if (/2-yo.nalish/i.test(text)) return "frontend-vue";
   return null;
 }
 
-// Таблица правила раздела 2: Mavzu | 15 | 18 | 20 | Bankda.
-const TOPIC_LABELS = [
-  [/^html\s*\+\s*css$/i, ["html", "css"]],
-  [/^html$/i, ["html"]],
-  [/^css$/i, ["css"]],
-  [/^javascript$/i, ["js"]],
-  [/^react$/i, ["react"]],
-  [/^vue$/i, ["vue"]],
-  [/^tailwind/i, ["tailwind"]],
-];
+// Строка таблицы квот: «HTML + CSS» → ["html", "css"]; не тема → null.
+function quotaTopics(label) {
+  const topics = label.split("+").map((part) => topicByName(part));
+  return topics.length && topics.every(Boolean) ? topics : null;
+}
 function parseQuotaTable(rows) {
   const header = rows[0] || [];
   const sizes = header.slice(1).map((h) => parseInt(h, 10)).filter((n) => Number.isFinite(n));
@@ -67,11 +56,11 @@ function parseQuotaTable(rows) {
   for (const row of rows.slice(1)) {
     const label = String(row[0] || "").trim();
     if (/^jami$/i.test(label)) continue;
-    const match = TOPIC_LABELS.find(([re]) => re.test(label));
-    if (!match) continue;
+    const topics = quotaTopics(label);
+    if (!topics) continue;
     sizes.forEach((size, i) => {
       const n = parseInt(row[i + 1], 10);
-      if (Number.isFinite(n)) quotas[size].push({ topics: match[1], count: n });
+      if (Number.isFinite(n)) quotas[size].push({ topics, count: n });
     });
   }
   return quotas;
@@ -119,7 +108,7 @@ function parseBank(blocks) {
         const codes = [];
         for (const row of b.rows.slice(1)) {
           const code = String(row[1] || "").trim();
-          if (!/^[HCJRVT]\d+$/.test(code)) continue;
+          if (!SET_CODE_RE.test(code)) continue;
           codes.push(code);
           if (row[3] && !shortByCode[code]) shortByCode[code] = row[3].replace(/\s+/g, " ").trim();
         }
@@ -154,16 +143,14 @@ function parseBank(blocks) {
       const setM = trimmed.match(/^(\d+)-to.plam$/i);
       if (setM && sectionTrack) pendingSet = { track: sectionTrack, number: parseInt(setM[1], 10) };
       if (/^\d+\s*[–-]\s*\d+-to.plamlar/i.test(trimmed) && sectionTrack) compactNext = true;
-      const cnt = trimmed.match(/^(HTML|CSS|JavaScript|React|Vue|Tailwind CSS)\s*\((\d+)\s*ta\)/i);
-      if (cnt) {
-        const topic = { html: "html", css: "css", javascript: "js", react: "react", vue: "vue", "tailwind css": "tailwind" }[cnt[1].toLowerCase()];
-        declaredCounts[topic] = parseInt(cnt[2], 10);
-      }
+      const cnt = trimmed.match(/^(.+?)\s*\((\d+)\s*ta\)/i);
+      const cntTopic = cnt && topicByName(cnt[1], { exact: true });
+      if (cntTopic) declaredCounts[cntTopic] = parseInt(cnt[2], 10);
       continue;
     }
 
     // Раздел 2: подзаголовки «1-yo'nalish (…)» — обычные абзацы перед таблицей квот.
-    if (!current && /^[12]-yo.nalish\s*\(/i.test(trimmed)) quotaTrack = trackOfSection(trimmed);
+    if (!current && /^[123]-yo.nalish\s*\(/i.test(trimmed)) quotaTrack = trackOfSection(trimmed);
 
     if (!current) {
       const lv = trimmed.match(/^-?\s*Daraja:\s*18 savolda (\d+) oson.*?\+\s*(\d+) o.rta\s*\+\s*(\d+) qiyin;\s*15 savolda (\d+)\s*\+\s*(\d+)\s*\+\s*(\d+);\s*20 savolda (\d+)\s*\+\s*(\d+)\s*\+\s*(\d+)/i);

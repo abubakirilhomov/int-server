@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { BANK_TRACKS } = require("../config/questionBankTopics");
 
 // Набор вопросов для собеседования: упорядоченный список кодов банка.
 // 15+15 готовых наборов импортируются из docx (source "docx"); дальше —
@@ -6,7 +7,7 @@ const mongoose = require("mongoose");
 // «Кто какой набор взял» отдельно не хранится: это InterviewSession.set.
 const interviewSetSchema = new mongoose.Schema(
   {
-    track: { type: String, enum: ["frontend-react", "frontend-vue"], required: true },
+    track: { type: String, enum: BANK_TRACKS, required: true },
     number: { type: Number, required: true },
     questionCodes: { type: [String], default: [] },
     size: { type: Number, default: 0 },

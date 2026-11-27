@@ -1,30 +1,37 @@
 const mongoose = require("mongoose");
+const { TOPICS, PREFIX, CODE_PATTERN, BANK_TRACKS } = require("../config/questionBankTopics");
 
-// Банк вопросов для живых собеседований кандидатов (frontend-треки).
-// Содержимое КОНФИДЕНЦИАЛЬНО: живёт только в БД, импортируется скриптом
-// scripts/import-question-bank.js из файла вне репозитория (репо публичный).
-// Старый InterviewTopic (метки тем для чек-листа) остаётся для backend-трека.
+// Банк вопросов для живых собеседований кандидатов.
+// Содержимое КОНФИДЕНЦИАЛЬНО: живёт только в БД, импортируется скриптами
+// scripts/import-question-bank.js (uz, docx) и scripts/import-question-translations.js
+// (ru, json) из файлов вне репозитория (репо публичный).
+// Старый InterviewTopic (метки тем для чек-листа) остаётся, пока у трека нет наборов.
+//
+// Языки: основной — узбекский (поля без суффикса), перевод — поля *Ru.
+// Кандидат получает выбранный язык, при пустом переводе — узбекский
+// (serializers/candidateView). ruSourceHash — хеш узбекского текста, с
+// которого сделан перевод: правка uz делает перевод «устаревшим», а не тихо неверным.
 
-const TOPICS = ["html", "css", "js", "react", "vue", "tailwind"];
 const LEVELS = ["oson", "orta", "qiyin"];
-const ANSWER_KINDS = ["text", "code", "sandbox"];
-const SANDBOX_TEMPLATES = ["static", "vanilla", "react", "vue", "vue-tailwind"];
+const ANSWER_KINDS = ["text", "code", "sandbox", "choice"];
+const SANDBOX_TEMPLATES = ["static", "vanilla", "react", "vue", "vue-tailwind", "node"];
 
-// Префикс кода → тема и треки. H/C/J — общая база для обоих направлений.
-const PREFIX = {
-  H: { topic: "html", tracks: ["frontend-react", "frontend-vue"] },
-  C: { topic: "css", tracks: ["frontend-react", "frontend-vue"] },
-  J: { topic: "js", tracks: ["frontend-react", "frontend-vue"] },
-  R: { topic: "react", tracks: ["frontend-react"] },
-  V: { topic: "vue", tracks: ["frontend-vue"] },
-  T: { topic: "tailwind", tracks: ["frontend-vue"] },
-};
+// Вариант ответа (answerKind "choice"). correct — только для интервьюера.
+const optionSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true }, // "A", "B", …
+    text: { type: String, required: true },
+    textRu: { type: String, default: "" },
+    correct: { type: Boolean, default: false, select: false },
+  },
+  { _id: false }
+);
 
 const bankQuestionSchema = new mongoose.Schema(
   {
-    code: { type: String, required: true, unique: true, match: /^[HCJRVT]\d{1,3}$/ },
+    code: { type: String, required: true, unique: true, match: new RegExp(`^${CODE_PATTERN}$`) },
     topic: { type: String, enum: TOPICS, required: true, index: true },
-    tracks: { type: [String], default: [], index: true },
+    tracks: { type: [{ type: String, enum: BANK_TRACKS }], default: [], index: true },
     level: { type: String, enum: LEVELS, required: true },
     isPractical: { type: Boolean, default: false },
     isMiniTask: { type: Boolean, default: false },
@@ -32,10 +39,19 @@ const bankQuestionSchema = new mongoose.Schema(
 
     // То, что видит кандидат (markdown, код — в ```-блоках).
     prompt: { type: String, required: true },
+    promptRu: { type: String, default: "" },
     promptShort: { type: String, default: "" },
-    // Ответ-черновик — ТОЛЬКО для интервьюера. select:false: случайный
-    // find() его не вернёт, админские запросы просят явно (+expectedAnswer).
+    promptShortRu: { type: String, default: "" },
+    // Ответ-черновик или критерии оценки — ТОЛЬКО для интервьюера. select:false:
+    // случайный find() его не вернёт, админские запросы просят явно (+expectedAnswer).
     expectedAnswer: { type: String, default: "", select: false },
+    expectedAnswerRu: { type: String, default: "", select: false },
+    options: { type: [optionSchema], default: undefined },
+
+    // Перевод на русский: с какого uz-текста сделан (utils/questionBank/i18n.uzTextHash).
+    ruSourceHash: { type: String, default: "" },
+    ruUpdatedAt: { type: Date, default: null },
+    ruUpdatedBy: { type: String, default: "" },
 
     answerKind: { type: String, enum: ANSWER_KINDS, default: "text" },
     sandbox: {

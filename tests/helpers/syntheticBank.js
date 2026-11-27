@@ -75,4 +75,29 @@ function syntheticBlocks({ brokenSet = false } = {}) {
   ];
 }
 
-module.exports = { syntheticBlocks };
+// Синтетический backend-банк (трек backend-nodejs): Node.js, Express, БД, API.
+function syntheticBackendBlocks() {
+  return [
+    h1("2. To'plam tuzish qoidasi"),
+    p("3-yo'nalish (Node.js + Express)"),
+    table([["Mavzu", "4 savol", "Bankda"], ["Node.js + Express", "2", "2"], ["MongoDB", "1", "1"], ["API va HTTP", "1", "1"], ["Jami", "4", "4"]]),
+    h1("3. Tayyor to'plamlar — Backend (Node.js)"),
+    h2("1-to'plam"),
+    table([
+      ["№", "ID", "Daraja", "Savol (qisqa)"],
+      ["1", "N1", "oson", "Sintetik Node qisqa"], ["2", "E1", "o'rta", "Sintetik Express qisqa"],
+      ["3", "D1", "o'rta", "Sintetik DB qisqa"], ["4", "A1", "qiyin, amaliy", "Sintetik API qisqa"],
+    ]),
+    h1("5. Savollar banki — Backend"),
+    h2("Node.js (1 ta)"),
+    ...q("N1", "oson", false, "Sintetik Node savol.", "Sintetik javob N1."),
+    h2("Express (1 ta)"),
+    ...q("E1", "o'rta", false, "Sintetik Express savol.", "Sintetik javob E1."),
+    h2("MongoDB (1 ta)"),
+    ...q("D1", "o'rta", false, "Sintetik DB savol.", "Sintetik javob D1."),
+    h2("API va HTTP (1 ta)"),
+    ...q("A1", "qiyin", true, "Sintetik API savol.", "Sintetik javob A1.", ["app.get('/x', h);"]),
+  ];
+}
+
+module.exports = { syntheticBlocks, syntheticBackendBlocks };

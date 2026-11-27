@@ -2,8 +2,9 @@ const mongoose = require("mongoose");
 
 // Живая сессия собеседования (Interview.mode = "live"), 1:1 с Interview.
 // questions[] — снимки вопросов на момент старта: правка банка не меняет
-// прошедшие собеседования. expectedAnswer в снимок НЕ копируется —
-// интервьюер получает его из банка по code.
+// прошедшие собеседования. expectedAnswer и отметка верного варианта в снимок
+// НЕ копируются — интервьюер получает их из банка по code. Тексты — на обоих
+// языках: кандидат может сменить язык посреди собеседования.
 const QUESTION_STATES = ["hidden", "open", "closed"];
 const RESULTS = ["pass", "partial", "fail"];
 
@@ -15,7 +16,10 @@ const sessionQuestionSchema = new mongoose.Schema(
     level: String,
     isPractical: Boolean,
     prompt: { type: String, required: true },
+    promptRu: { type: String, default: "" },
     promptShort: String,
+    promptShortRu: { type: String, default: "" },
+    options: { type: [{ _id: false, key: String, text: String, textRu: String }], default: undefined },
     answerKind: { type: String, default: "text" },
     sandbox: {
       template: { type: String, default: undefined },
@@ -46,6 +50,8 @@ const interviewSessionSchema = new mongoose.Schema(
     interview: { type: mongoose.Schema.Types.ObjectId, ref: "Interview", required: true, unique: true },
     set: { type: mongoose.Schema.Types.ObjectId, ref: "InterviewSet", default: null, index: true },
     track: { type: String, required: true },
+    // Язык, выбранный кандидатом (uz | ru); вопросы без перевода идут на uz.
+    language: { type: String, enum: ["uz", "ru"], default: "uz" },
     interviewer: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },
     status: {
       type: String,

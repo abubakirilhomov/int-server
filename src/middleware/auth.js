@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const RevokedToken = require("../models/revokedTokenModel");
+const { isAccessClaims } = require("../utils/tokenKeys");
 
 const auth = async (req, res, next) => {
   const header = req.headers.authorization;
@@ -14,6 +15,12 @@ const auth = async (req, res, next) => {
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
   } catch (err) {
+    return res.status(401).json({ message: "Неверный токен" });
+  }
+
+  // Только access-токены: служебные токены (state, linkage, refresh)
+  // не должны открывать API, даже если подписаны тем же секретом.
+  if (!isAccessClaims(decoded)) {
     return res.status(401).json({ message: "Неверный токен" });
   }
 

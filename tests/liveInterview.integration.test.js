@@ -327,6 +327,42 @@ describe("полный цикл живого собеседования", () => 
     expect(after.body.code).toBe("revoked");
   });
 
+  test("код (J1): редактор js; закрыт без черновика → запись 409, даже если опрос прочитал сессию до закрытия", async () => {
+    const o = await api("POST", `/api/interviews/${ivA._id}/live/questions/J1/open`, { token: adminToken });
+    expect(o.body.questions.find((q) => q.code === "J1").editor).toBe("js");
+    expect(o.body.questions.find((q) => q.code === "H1").editor).toBeNull();
+    const cs = (await api("GET", "/api/candidate/session", { token: ctoken })).body;
+    const j = cs.questions.find((q) => q.position === cs.current);
+    expect(j).toMatchObject({ answerKind: "code", editor: "js", answer: null });
+    expect(cs.questions.find((q) => q.position === 1).editor).toBeUndefined();
+
+    const c = await api("POST", `/api/interviews/${ivA._id}/live/questions/J1/close`, { token: adminToken });
+    expect(c.status).toBe(200);
+    // заглушка заморозки не выглядит как ответ ни у интервьюера, ни у кандидата
+    expect(c.body.questions.find((q) => q.code === "J1").answer).toBeNull();
+    const after = (await api("GET", "/api/candidate/session", { token: ctoken })).body;
+    expect(after.questions.find((q) => q.position === j.position).answer).toBeNull();
+    expect((await api("PUT", `/api/candidate/answers/${j.position}`, { token: ctoken, body: { text: "kech", revision: 1 } })).body.code).toBe("closed");
+
+    // Гонка: запрос кандидата прочитал сессию, где J1 ещё открыт, а пишет уже после закрытия.
+    // Эмулируем: состояние в сессии «open», но заморозка уже прошла.
+    await InterviewSession.updateOne({ interview: ivA._id, "questions.code": "J1" }, { $set: { "questions.$.state": "open" } });
+    const race = await api("PUT", `/api/candidate/answers/${j.position}`, { token: ctoken, body: { text: "poyga", revision: 2 } });
+    expect(race.status).toBe(409);
+    expect(race.body.code).toBe("closed");
+    await InterviewSession.updateOne({ interview: ivA._id, "questions.code": "J1" }, { $set: { "questions.$.state": "closed" } });
+    const v = (await api("GET", `/api/interviews/${ivA._id}/live`, { token: adminToken })).body;
+    expect(v.questions.find((q) => q.code === "J1").answer).toBeNull();
+    expect(JSON.stringify(v)).not.toContain("poyga");
+
+    // повторное открытие размораживает — писать снова можно
+    await api("POST", `/api/interviews/${ivA._id}/live/questions/J1/open`, { token: adminToken });
+    const w = await api("PUT", `/api/candidate/answers/${j.position}`, { token: ctoken, body: { text: "console.log(1)", revision: 3 } });
+    expect(w.status).toBe(200);
+    // вернуть как было для следующего теста: открыт C1 «только обсудить»
+    await api("POST", `/api/interviews/${ivA._id}/live/questions/C1/discuss`, { token: adminToken });
+  });
+
   test("завершить → Interview completed, письмо без текста вопросов, доступ отозван", async () => {
     await api("PATCH", `/api/interviews/${ivA._id}/live/questions/C1`, { token: adminToken, body: { result: "partial" } });
     // J1 открыт и не оценён — в итог как 0 (решение Абубакира 27.11)

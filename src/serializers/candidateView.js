@@ -12,6 +12,7 @@
 // сама содержит ответ) и только поля из DEMO_FIELDS. Исправленная сцена
 // (demoFix) кандидату не отдаётся никогда — здесь её даже не читают.
 const { normalizeLanguage, localized, localizedOptions } = require("../utils/questionBank/i18n");
+const { editorFor } = require("../config/questionBankTopics");
 
 const DEMO_FIELDS = ["html", "css", "height", "width", "slider", "layers3d"];
 const STEP_FIELDS = ["type", "ms", "target", "to", "className"];
@@ -56,6 +57,9 @@ function toCandidateQuestion(q, position, lang) {
   if (options) out.options = options;
   if (q.state) out.state = q.state === "closed" ? "closed" : "open";
   if (q.discussOnly) out.discussOnly = true;
+  // Редактор (web | js | jsx | vue | html | node) — по треку; сам код вопроса не уходит.
+  const editor = editorFor(q);
+  if (editor) out.editor = editor;
   const files = plainFiles(q.sandbox?.files);
   if (q.sandbox?.template || files) {
     out.sandbox = { template: q.sandbox?.template || null, files: files || {} };
@@ -74,8 +78,13 @@ function visibleQuestions(session) {
 }
 
 // Собственный ответ кандидата — только текст и отметки времени.
+// Заглушка, созданная заморозкой без ответа (isEmptyAnswer), — как «ответа нет».
+function isEmptyAnswer(a) {
+  return !a || (!a.text && !a.submittedAt && !a.draftUpdatedAt);
+}
+
 function toCandidateAnswer(a) {
-  if (!a) return null;
+  if (isEmptyAnswer(a)) return null;
   return {
     text: String(a.text || ""),
     revision: Number(a.revision) || 0,
@@ -109,4 +118,4 @@ function toCandidateSession(session, lang, answersByCode) {
   };
 }
 
-module.exports = { toCandidateQuestion, toCandidateSession, toCandidateDemo, visibleQuestions };
+module.exports = { isEmptyAnswer, toCandidateQuestion, toCandidateSession, toCandidateDemo, visibleQuestions };

@@ -3,6 +3,8 @@
 // ответы кандидата, сигналы, текущий балл, состояние доступа.
 // Кандидату этот вид не отдаётся никогда — у него serializers/candidateView.
 const { computeQuestionScore } = require("../utils/scoreInterview");
+const { editorFor } = require("../config/questionBankTopics");
+const { isEmptyAnswer } = require("./candidateView");
 
 const ONLINE_MS = 20 * 1000;
 
@@ -47,7 +49,7 @@ function sessionScore(questions, cfg) {
 }
 
 function answerView(a) {
-  if (!a) return null;
+  if (isEmptyAnswer(a)) return null; // заглушка заморозки — ответа не было
   return {
     kind: a.kind,
     text: a.text || "",
@@ -95,6 +97,7 @@ function toLiveView(session, ctx) {
       level: q.level,
       isPractical: Boolean(q.isPractical),
       answerKind: q.answerKind || "text",
+      editor: editorFor(q),
       prompt: q.prompt,
       promptRu: q.promptRu || "",
       promptShort: q.promptShort || "",

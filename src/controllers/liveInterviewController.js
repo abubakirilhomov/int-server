@@ -76,6 +76,25 @@ function bumpRev(sessionId, candidateVisible) {
 }
 
 // Полный вид для интервьюера (после каждого действия и в опросе).
+// Заморозка ответов закрытых вопросов. Если кандидат ещё ничего не писал,
+// создаётся пустая замороженная заглушка: иначе запись кандидата, прочитавшего
+// сессию за миг до закрытия, создала бы новый НЕзамороженный ответ (upsert)
+// уже после закрытия. С заглушкой такой upsert упирается в уникальный индекс
+// (session, questionCode) → 409 closed. Заглушку сериализаторы показывают как «ответа нет».
+function freezeAnswers(session, codes, now) {
+  const kindOf = new Map(session.questions.map((q) => [q.code, q.answerKind]));
+  return Answer.bulkWrite(codes.map((code) => ({
+    updateOne: {
+      filter: { session: session._id, questionCode: code },
+      update: {
+        $set: { frozenAt: now },
+        $setOnInsert: { kind: ["code", "sandbox", "choice"].includes(kindOf.get(code)) ? kindOf.get(code) : "text", text: "", revision: 0 },
+      },
+      upsert: true,
+    },
+  })), { ordered: false });
+}
+
 async function buildView(sessionOrId, extra = {}) {
   const session = sessionOrId instanceof InterviewSession
     ? sessionOrId
@@ -312,7 +331,7 @@ exports.questionAction = catchAsync(async (req, res) => {
   }
   const [saved] = await Promise.all([
     saveQuestionsWithBump(session, true),
-    freeze.length && Answer.updateMany({ session: session._id, questionCode: { $in: freeze }, frozenAt: null }, { $set: { frozenAt: now } }),
+    freeze.length && freezeAnswers(session, freeze, now),
     unfreeze.length && Answer.updateMany({ session: session._id, questionCode: { $in: unfreeze } }, { $set: { frozenAt: null } }),
   ]);
   res.json(await buildView(saved));
@@ -405,7 +424,10 @@ exports.finish = catchAsync(async (req, res) => {
   session.finishedBy = actorId(req);
   await session.save();
   await bumpRev(session._id, true);
-  await Answer.updateMany({ session: session._id, frozenAt: null }, { $set: { frozenAt: now } });
+  await Promise.all([
+    Answer.updateMany({ session: session._id, frozenAt: null }, { $set: { frozenAt: now } }),
+    openCodes.length && freezeAnswers(session, openCodes, now),
+  ]);
 
   const letter = buildLetters({
     candidateName: app ? `${app.firstName || ""} ${app.lastName || ""}`.trim() : "",

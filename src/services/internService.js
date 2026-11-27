@@ -8,7 +8,15 @@ const AppError = require("../utils/AppError");
 const bcrypt = require("bcrypt");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const isAdminUser = require("../utils/isAdminUser");
-const { computePenalties, buildRuleMap, PENALTY_WEIGHTS, demoteGrade } = require("../utils/penaltyUtils");
+const {
+    computePenalties,
+    buildRuleMap,
+    demoteGrade,
+    deductionFor,
+    isPraiseCategory,
+    resolveCategory,
+    splitViolations,
+} = require("../utils/penaltyUtils");
 const BADGE_DEFINITIONS = require("../config/badges");
 
 const BADGE_POINTS_BY_KEY = BADGE_DEFINITIONS.reduce((map, def) => {
@@ -25,6 +33,9 @@ const BADGE_BONUS_CAP = 80;
 // category: green | yellow | red | black. Qaytarilgan demoted — daraja
 // pasaygan bo'lsa { from, to }, aks holda null.
 function applyViolationPenalty(intern, category) {
+  // Green — rag'bat: shtraf hisoblagichi, daraja va reytingga tegmaydi.
+  if (isPraiseCategory(category)) return { weight: 0, demoted: null };
+
   intern.violationsCount = (intern.violationsCount || 0) + 1;
   intern.lastViolationAt = new Date();
 
@@ -33,13 +44,20 @@ function applyViolationPenalty(intern, category) {
   // "Пересчитываем общий балл"), ya'ni bu ayirish vaqtinchalik va beqaror
   // edi. Jarima reytingga penaltyInfo.totalDeduction orqali bir marta va
   // barqaror qo'llaniladi (getRatings() va boshqa reyting funksiyalarida).
-  const weight = PENALTY_WEIGHTS[category] || 0;
+  const weight = deductionFor(category);
 
   const demoteSteps = category === "red" ? 1 : category === "black" ? 1 : 0;
   const demoted = demoteGrade(intern.grade, demoteSteps);
   if (demoted) intern.grade = demoted.to;
 
   return { weight, demoted };
+}
+
+// violations[].consequenceApplied matni (admin/ментор ko'radi).
+function consequenceText(category, demoted) {
+  if (isPraiseCategory(category)) return "Rag'bat: reytingga ta'sir yo'q";
+  if (demoted) return `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`;
+  return `Reyting ta'siri: -${deductionFor(category)}`;
 }
 
 class InternService {
@@ -366,13 +384,8 @@ class InternService {
             }) || [];
 
         // 🔹 Shtraf ma'lumotlari: violations ro'yxati + penaltyInfo
-        const safeViolations = (intern.violations || []).map((v) => {
-            const obj = v.toObject ? v.toObject() : v;
-            return {
-                ...obj,
-                rule: obj.ruleId || null,
-            };
-        });
+        // Green (rag'bat) — shtraf emas: alohida `praises` ro'yxatida.
+        const { penalties: safeViolations, praises } = splitViolations(intern.violations || []);
         const penaltyInfo = computePenalties(intern.violations || [], {});
 
         return {
@@ -412,6 +425,7 @@ class InternService {
             complaints: intern.complaints || [],
             // 🔹 Shtraf: violations ro'yxati + penaltyInfo (eng yomon daraja, sonlar)
             violations: safeViolations,
+            praises,
             violationsCount: intern.violationsCount || 0,
             lastViolationAt: intern.lastViolationAt || null,
             penaltyInfo,
@@ -672,9 +686,7 @@ class InternService {
                 notes: text || `Жалоба от branch manager: ${rule.title}`,
                 issuedBy: isAdminUser(user) ? "admin" : "branchManager",
                 issuedById: user.id || user._id,
-                consequenceApplied: demoted
-                    ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
-                    : `Reyting ta'siri: -${PENALTY_WEIGHTS[rule.category] || 0}`,
+                consequenceApplied: consequenceText(rule.category, demoted),
             });
         });
 
@@ -925,9 +937,7 @@ class InternService {
                     // $lookup по violations.issuedById) не может показать автора.
                     issuedBy: "mentor",
                     issuedById: mentorId,
-                    consequenceApplied: demoted
-                        ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
-                        : `Reyting ta'siri: -${PENALTY_WEIGHTS[category] || 0}`,
+                    consequenceApplied: consequenceText(category, demoted),
                 });
             }
         }
@@ -1244,19 +1254,24 @@ class InternService {
             notes: notes || "",
             issuedBy: "headIntern",
             issuedById: headInternId,
-            consequenceApplied: demoted
-                ? `Daraja pasaytirildi: ${demoted.from} → ${demoted.to}`
-                : `Reyting ta'siri: -${PENALTY_WEIGHTS[category] || 0}`,
+            consequenceApplied: consequenceText(category, demoted),
         });
 
-        // 2. 3+ shtraf bo'lsa weekly plan restricted
+        // 2. 3+ shtraf bo'lsa weekly plan restricted (rag'batlar hisoblanmaydi)
         const monthStart = new Date();
         monthStart.setDate(1);
         monthStart.setHours(0, 0, 0, 0);
-        const monthViolations = targetIntern.violations.filter(
+        const monthItems = targetIntern.violations.filter(
             (v) => new Date(v.date) >= monthStart
+        );
+        const monthRules = await Rule.find({
+            _id: { $in: [...new Set(monthItems.map((v) => String(v.ruleId)))] },
+        }).select("category").lean();
+        const monthRuleMap = buildRuleMap(monthRules);
+        const monthViolations = monthItems.filter(
+            (v) => !isPraiseCategory(resolveCategory(v, monthRuleMap))
         ).length;
-        if (monthViolations >= 3) {
+        if (!isPraiseCategory(category) && monthViolations >= 3) {
             targetIntern.weeklyPlan.status = "restricted";
             targetIntern.weeklyPlan.restrictedSince = new Date();
         }

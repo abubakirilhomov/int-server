@@ -42,6 +42,7 @@ router.post("/login", loginByIp, loginByUsername, ctrl.login);
 router.use(candidateAuth);
 router.get("/session", ctrl.getSession);
 router.put("/answers/:position", ctrl.putAnswer);
+router.get("/questions/:position/tests", ctrl.getTests);
 router.post("/signals", ctrl.postSignal);
 router.patch("/language", ctrl.setLanguage);
 

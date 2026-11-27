@@ -36,8 +36,10 @@ const EDITOR_BY_PREFIX = Object.fromEntries(TOPIC_DEFS.map((d) => [d.prefix, d.e
 const EDITOR_BY_TEMPLATE = { static: "web", vanilla: "js", react: "jsx", vue: "vue", "vue-tailwind": "tailwind", node: "node" };
 
 // Вопрос (снимок сессии или банк) → редактор; null — ответ не код.
+const EDITORS = ["web", "js", "jsx", "vue", "tailwind", "html", "node"];
 function editorFor(q) {
   if (!q || !["code", "sandbox"].includes(q.answerKind)) return null;
+  if (EDITORS.includes(q.editor)) return q.editor; // явный выбор в редакторе банка
   const byTemplate = EDITOR_BY_TEMPLATE[q.sandbox?.template];
   if (byTemplate) return byTemplate;
   return EDITOR_BY_PREFIX[String(q.code || "").charAt(0)] || "js";
@@ -65,5 +67,5 @@ function topicByName(name, { exact = false } = {}) {
 
 module.exports = {
   BANK_TRACKS, LANGUAGES, DEFAULT_LANGUAGE, TOPIC_DEFS, PREFIX, CODE_LANG, TOPICS, TOPIC_LABELS,
-  PREFIX_CHARS, CODE_PATTERN, APOS, escapeRe, topicByName, editorFor, EDITOR_BY_PREFIX,
+  PREFIX_CHARS, CODE_PATTERN, APOS, escapeRe, topicByName, editorFor, EDITOR_BY_PREFIX, EDITORS,
 };

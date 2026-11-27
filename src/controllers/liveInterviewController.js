@@ -31,7 +31,7 @@ function parseSize(raw, cfg) {
   return n;
 }
 const actorId = (req) => req.user?.id || req.user?._id || null;
-const SNAPSHOT_FIELDS = "code topic level isPractical prompt promptRu promptShort promptShortRu options answerKind sandbox demo";
+const SNAPSHOT_FIELDS = "code topic level isPractical prompt promptRu promptShort promptShortRu options answerKind editor sandbox demo +tests";
 
 async function loadInterview(id) {
   if (!isId(id)) throw new AppError("Некорректный ID", 400);
@@ -102,7 +102,7 @@ async function buildView(sessionOrId, extra = {}) {
   const codes = session.questions.map((q) => q.code);
   const [bank, answers, acc, interview, set, cfg] = await Promise.all([
     BankQuestion.find({ code: { $in: codes } })
-      .select("+expectedAnswer +expectedAnswerRu +options.correct +demoFix")
+      .select("+expectedAnswer +expectedAnswerRu +options.correct +demoFix +tests")
       .lean(),
     Answer.find({ session: session._id }).lean(),
     CandidateAccess.findOne({ interview: session.interview }).lean(),
@@ -223,6 +223,8 @@ exports.start = catchAsync(async (req, res) => {
       prompt: q.prompt, promptRu: q.promptRu || "", promptShort: q.promptShort || "", promptShortRu: q.promptShortRu || "",
       options: q.options?.length ? q.options.map((o) => ({ key: o.key, text: o.text, textRu: o.textRu || "" })) : undefined,
       answerKind: q.answerKind || "text",
+      editor: q.editor || undefined,
+      tests: q.tests?.length ? q.tests.map((t) => ({ name: t.name, nameRu: t.nameRu || "" })) : undefined,
       sandbox: q.sandbox?.template || q.sandbox?.files ? q.sandbox : undefined,
       demo: q.demo?.html ? q.demo : undefined,
       state: "hidden",

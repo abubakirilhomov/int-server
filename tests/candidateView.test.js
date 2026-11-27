@@ -2,7 +2,7 @@
 // Данные синтетические.
 const { toCandidateQuestion, toCandidateSession } = require("../src/serializers/candidateView");
 
-const SECRET_FIELDS = ["expectedAnswer", "tests", "result", "note", "code", "level", "isPractical",
+const SECRET_FIELDS = ["expectedAnswer", "result", "note", "code", "level", "isPractical",
   "conflictGroup", "promptShort", "topic", "contentHash", "updatedBy", "_id"];
 
 function deepKeys(obj, acc = new Set()) {
@@ -22,7 +22,7 @@ const bankDoc = {
   promptShort: "qisqa",
   prompt: "Sintetik savol: funksiya yozing.",
   expectedAnswer: "MAXFIY sintetik javob",
-  tests: [{ name: "t", code: "assert(true)" }],
+  tests: [{ name: "t", nameRu: "т", code: "assert.ok(MAXFIY_TEST_KODI)" }],
   answerKind: "sandbox",
   sandbox: { template: "vanilla", files: new Map([["/index.js", "// start"]]) },
   contentHash: "h",
@@ -38,10 +38,37 @@ describe("toCandidateQuestion", () => {
       answerKind: "sandbox",
       editor: "js",
       sandbox: { template: "vanilla", files: { "/index.js": "// start" } },
+      tests: [{ name: "t" }], // только названия проверок
     });
     const keys = deepKeys(out);
     SECRET_FIELDS.forEach((f) => expect(keys.has(f)).toBe(false));
     expect(JSON.stringify(out)).not.toContain("MAXFIY");
+    expect(keys.has("code")).toBe(false);
+  });
+
+  test("автотесты: кандидату только названия на его языке, кода тестов нет нигде", () => {
+    const uz = toCandidateQuestion(bankDoc, 1, "uz");
+    const ru = toCandidateQuestion(bankDoc, 1, "ru");
+    expect(uz.tests).toEqual([{ name: "t" }]);
+    expect(ru.tests).toEqual([{ name: "т" }]);
+    for (const out of [uz, ru]) {
+      expect(JSON.stringify(out)).not.toContain("MAXFIY_TEST_KODI");
+      out.tests.forEach((t) => expect(Object.keys(t)).toEqual(["name"]));
+    }
+    // русского названия нет → узбекское
+    const noRu = toCandidateQuestion({ ...bankDoc, tests: [{ name: "faqat-uz", code: "x" }] }, 1, "ru");
+    expect(noRu.tests).toEqual([{ name: "faqat-uz" }]);
+  });
+
+  test("вся сессия не содержит кода тестов; у текстового вопроса тестов нет", () => {
+    const snapshot = { code: "J99", order: 0, prompt: "p", answerKind: "code", state: "open", openedAt: new Date(),
+      tests: [{ name: "t1", code: "assert.ok(MAXFIY_TEST_KODI)" }] };
+    const text = { code: "H1", order: 1, prompt: "p2", answerKind: "text", state: "open", openedAt: new Date(Date.now() + 1),
+      tests: [{ name: "t2", code: "assert.ok(MAXFIY_TEST_KODI)" }] };
+    const out = toCandidateSession({ status: "live", rev: 1, questions: [snapshot, text] });
+    expect(JSON.stringify(out)).not.toContain("MAXFIY_TEST_KODI");
+    expect(out.questions[0].tests).toEqual([{ name: "t1" }]);
+    expect(out.questions[1].tests).toBeUndefined();
   });
 });
 

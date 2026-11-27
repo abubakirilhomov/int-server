@@ -98,6 +98,8 @@ app.use(
 // Ответы кандидата (код) не влезают в 10 КБ: свой парсер до общего — общий
 // пропускает уже разобранное тело.
 app.use("/api/candidate/answers", express.json({ limit: "200kb" }));
+// Редактор банка (админ): вопрос с ответом, сценой и тестами не влезает в 10 КБ.
+app.use("/api/question-bank", express.json({ limit: "100kb" }));
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 

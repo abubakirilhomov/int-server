@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { TOPICS, PREFIX, CODE_PATTERN, BANK_TRACKS } = require("../config/questionBankTopics");
 const { questionDemoSchema, questionDemoFixSchema } = require("./schemas/questionDemoSchema");
 const { normalizeDemo, normalizeDemoFix } = require("../utils/questionBank/demo");
+const { normalizeTests } = require("../utils/questionBank/tests");
 
 // Банк вопросов для живых собеседований кандидатов.
 // Содержимое КОНФИДЕНЦИАЛЬНО: живёт только в БД, импортируется скриптами
@@ -17,6 +18,8 @@ const { normalizeDemo, normalizeDemoFix } = require("../utils/questionBank/demo"
 const LEVELS = ["oson", "orta", "qiyin"];
 const ANSWER_KINDS = ["text", "code", "sandbox", "choice"];
 const SANDBOX_TEMPLATES = ["static", "vanilla", "react", "vue", "vue-tailwind", "node"];
+// Редактор ответа (см. config/questionBankTopics.editorFor). Не задан → по префиксу кода.
+const EDITORS = ["web", "js", "jsx", "vue", "tailwind", "html", "node"];
 
 // Вариант ответа (answerKind "choice"). correct — только для интервьюера.
 const optionSchema = new mongoose.Schema(
@@ -60,8 +63,10 @@ const bankQuestionSchema = new mongoose.Schema(
       template: { type: String, enum: SANDBOX_TEMPLATES, default: undefined },
       files: { type: Map, of: String, default: undefined },
     },
-    // Автотесты мини-заданий (этап 6). Кандидату не отдаются.
-    tests: { type: [{ name: String, code: String }], default: [], select: false },
+    editor: { type: String, enum: EDITORS, default: undefined },
+    // Автотесты мини-заданий (этап 6): { name (uz), nameRu, code } — utils/questionBank/tests.js.
+    // select:false; кандидату — только названия, код отдельной выдачей (candidateController.getTests).
+    tests: { type: [{ _id: false, name: String, nameRu: { type: String, default: "" }, code: String }], default: [], select: false },
 
     // Живая сцена под вопросом (utils/questionBank/demo.js). Кандидату — только
     // при demo.audience "candidate". demoFix — исправленная сцена, ТОЛЬКО для
@@ -83,6 +88,16 @@ const bankQuestionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Тесты проверяются целиком (число, названия, синтаксис) при каждом сохранении.
+bankQuestionSchema.pre("validate", function checkTests() {
+  if (!this.isModified("tests")) return;
+  try {
+    normalizeTests((this.tests || []).map((t) => (t.toObject ? t.toObject() : t)));
+  } catch (e) {
+    this.invalidate("tests", e.message);
+  }
+});
+
 // Сцена проверяется целиком (типы шагов, лимиты) при каждом сохранении.
 bankQuestionSchema.pre("validate", function checkDemo() {
   for (const [field, normalize] of [["demo", normalizeDemo], ["demoFix", normalizeDemoFix]]) {
@@ -98,5 +113,7 @@ bankQuestionSchema.pre("validate", function checkDemo() {
 bankQuestionSchema.statics.TOPICS = TOPICS;
 bankQuestionSchema.statics.LEVELS = LEVELS;
 bankQuestionSchema.statics.PREFIX = PREFIX;
+bankQuestionSchema.statics.EDITORS = EDITORS;
+bankQuestionSchema.statics.ANSWER_KINDS = ANSWER_KINDS;
 
 module.exports = mongoose.model("BankQuestion", bankQuestionSchema);

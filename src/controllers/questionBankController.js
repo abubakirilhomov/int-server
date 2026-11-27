@@ -6,6 +6,16 @@ const catchAsync = require("../utils/catchAsync");
 const { translationStatus } = require("../utils/questionBank/i18n");
 const { translationStats } = require("../services/questionTranslations");
 const { interviewModes } = require("../services/candidateInterviewMode");
+const admin = require("../services/questionBankAdmin");
+
+const actorId = (req) => req.user?.id || req.user?._id || "admin";
+// Ошибки с деталями (наборы, которым мешает правка; результат проверки набора).
+const withDetails = (err, res) => {
+  if (err && err.isOperational && (err.sets || err.check)) {
+    return res.status(err.statusCode).json({ status: err.status, message: err.message, sets: err.sets, check: err.check });
+  }
+  throw err;
+};
 
 exports.listQuestions = catchAsync(async (req, res) => {
   const filter = {};
@@ -14,7 +24,7 @@ exports.listQuestions = catchAsync(async (req, res) => {
   if (req.query.level) filter.level = String(req.query.level);
   if (req.query.active !== "all") filter.isActive = true;
   const questions = await BankQuestion.find(filter)
-    .select("+expectedAnswer +expectedAnswerRu +options.correct +demoFix")
+    .select(admin.SELECT_ALL)
     .sort({ topic: 1, order: 1 })
     .lean();
   questions.forEach((q) => { q.ruStatus = translationStatus(q); });
@@ -26,6 +36,37 @@ exports.listSets = catchAsync(async (req, res) => {
   if (req.query.track) filter.track = String(req.query.track);
   const sets = await InterviewSet.find(filter).sort({ track: 1, number: 1 }).lean();
   res.json({ count: sets.length, sets });
+});
+
+// ─── Редактор банка (этап 6) ─────────────────────────────────────────────────
+exports.createQuestion = catchAsync(async (req, res) => {
+  try {
+    res.status(201).json(await admin.createQuestion(req.body, actorId(req)));
+  } catch (e) { withDetails(e, res); }
+});
+
+exports.updateQuestion = catchAsync(async (req, res) => {
+  try {
+    res.json(await admin.updateQuestion(req.params.code, req.body, actorId(req)));
+  } catch (e) { withDetails(e, res); }
+});
+
+exports.checkSet = catchAsync(async (req, res) => {
+  res.json(await admin.checkSet({ track: req.body?.track, questionCodes: req.body?.questionCodes, ignoreSetId: req.body?.setId }));
+});
+
+exports.createSet = catchAsync(async (req, res) => {
+  try {
+    const { set, check } = await admin.createSet(req.body || {}, actorId(req));
+    res.status(201).json({ set, check });
+  } catch (e) { withDetails(e, res); }
+});
+
+exports.updateSet = catchAsync(async (req, res) => {
+  try {
+    const { set, check } = await admin.updateSet(req.params.id, req.body || {}, actorId(req));
+    res.json({ set, check });
+  } catch (e) { withDetails(e, res); }
 });
 
 // Сводка без текста вопросов — для смоков и дашборда.

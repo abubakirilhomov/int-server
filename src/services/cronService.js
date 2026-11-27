@@ -10,6 +10,7 @@ const Interview = require("../models/interviewModel");
 const Setting = require("../models/settingModel");
 const { sendMessage } = require("./telegramService");
 const { finalizeDueSessions } = require("../controllers/monthlyInterviewSessionController");
+const { expireDueAccesses } = require("./candidateAccess");
 
 // Ташкентский оффсет — единый источник в utils/tashkentTime.js.
 const { TASHKENT_OFFSET_MS } = require("../utils/tashkentTime");
@@ -120,6 +121,21 @@ class CronService {
                     }
                 } catch (error) {
                     console.error("❌ Error finalizing monthly interview sessions:", error);
+                }
+            },
+            { timezone: "Asia/Tashkent" }
+        );
+
+        // Har 5 daqiqada — muddati o'tgan nomzod kirishlarini "expired" qiladi
+        // (runtime ham o'tkazmaydi; bu — holatni bazada to'g'ri ko'rsatish uchun).
+        cron.schedule(
+            "*/5 * * * *",
+            async () => {
+                try {
+                    const n = await expireDueAccesses();
+                    if (n > 0) console.log(`🔒 Expired ${n} candidate access(es)`);
+                } catch (error) {
+                    console.error("❌ Error expiring candidate accesses:", error);
                 }
             },
             { timezone: "Asia/Tashkent" }

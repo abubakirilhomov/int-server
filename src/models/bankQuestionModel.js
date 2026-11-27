@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { TOPICS, PREFIX, CODE_PATTERN, BANK_TRACKS } = require("../config/questionBankTopics");
+const { TOPICS, PREFIX, CODE_PATTERN, BANK_TRACKS, EDITORS } = require("../config/questionBankTopics");
 const { questionDemoSchema, questionDemoFixSchema } = require("./schemas/questionDemoSchema");
 const { normalizeDemo, normalizeDemoFix } = require("../utils/questionBank/demo");
 const { normalizeTests } = require("../utils/questionBank/tests");
@@ -18,8 +18,7 @@ const { normalizeTests } = require("../utils/questionBank/tests");
 const LEVELS = ["oson", "orta", "qiyin"];
 const ANSWER_KINDS = ["text", "code", "sandbox", "choice"];
 const SANDBOX_TEMPLATES = ["static", "vanilla", "react", "vue", "vue-tailwind", "node"];
-// Редактор ответа (см. config/questionBankTopics.editorFor). Не задан → по префиксу кода.
-const EDITORS = ["web", "js", "jsx", "vue", "tailwind", "html", "node"];
+// Редактор ответа — config/questionBankTopics (EDITORS, editorFor). Не задан → по коду.
 
 // Вариант ответа (answerKind "choice"). correct — только для интервьюера.
 const optionSchema = new mongoose.Schema(
@@ -78,6 +77,11 @@ const bankQuestionSchema = new mongoose.Schema(
     conflictGroup: { type: String, default: null },
 
     isActive: { type: Boolean, default: true, index: true },
+    // Вопрос модуля, который группа ещё не прошла (Python-банк, раздел 5): неактивен,
+    // в наборы и генератор не попадает. Включение в редакторе банка снимает флаг.
+    notCovered: { type: Boolean, default: false },
+    // Подтема внутри модуля (Python M10: auth, orm, fk, …) — только для интервьюера.
+    subtopic: { type: String, default: null },
     version: { type: Number, default: 1 },
     source: { type: String, default: "manual" },
     // "import" — запись принадлежит импорту и обновляется им; иначе id

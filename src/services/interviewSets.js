@@ -7,6 +7,7 @@ const Interview = require("../models/interviewModel");
 const BankQuestion = require("../models/bankQuestionModel");
 const Setting = require("../models/settingModel");
 const { generateSet } = require("../utils/questionBank/generateSet");
+const { trackRules } = require("../utils/questionBank/trackRules");
 
 // Коды вопросов из прошлых живых попыток этого кандидата (пересдача).
 async function priorCodesOfApplication(applicationId, exceptInterviewId) {
@@ -82,21 +83,23 @@ async function suggestSets({ track, applicationId, interviewId, avoidRecent = 3 
   };
 }
 
-async function loadRules() {
+async function loadRules(track) {
   const doc = await Setting.findOne({ key: "questionBankRules" }).lean();
-  return doc?.value || null;
+  return trackRules(doc?.value || null, track);
 }
 
-// Набор по правилу без сохранения (предпросмотр) — коды + мягкие нарушения.
-async function previewGenerated({ track, size, applicationId, interviewId, avoidRecent = 3, rng }) {
-  const [questions, rules, recent, prior] = await Promise.all([
-    BankQuestion.find({ tracks: track, isActive: true })
+// Набор по правилу трека без сохранения (предпросмотр) — коды + мягкие нарушения.
+// extras — сколько вопросов из списка правила добавить сверх size (Python: HTML/CSS 0–2).
+async function previewGenerated({ track, size, extras = 0, applicationId, interviewId, avoidRecent = 3, rng }) {
+  const rules = await loadRules(track);
+  const extraCodes = rules.extras?.codes || [];
+  const [questions, recent, prior] = await Promise.all([
+    BankQuestion.find({ isActive: true, $or: [{ tracks: track }, ...(extraCodes.length ? [{ code: { $in: extraCodes } }] : [])] })
       .select("code topic tracks level isPractical isMiniTask conflictGroup order isActive").lean(),
-    loadRules(),
     recentOfTrack(track, avoidRecent),
     priorCodesOfApplication(applicationId, interviewId),
   ]);
-  const r = generateSet({ questions, track, size, rules, exclude: [...recent.codes, ...prior], rng });
+  const r = generateSet({ questions, track, size, rules, extras, exclude: [...recent.codes, ...prior], rng });
   return { ...r, overlap: r.codes.filter((c) => prior.has(c)).length, retake: prior.size > 0 };
 }
 
@@ -208,4 +211,4 @@ async function setsOverview({ track, recentN = 8, usesPerSet = 5 }) {
   };
 }
 
-module.exports = { rankSets, overlapCount, overlapMatrix, setsOverview, suggestSets, previewGenerated, saveSet, setHistory, usageBySet, recentOfTrack, isId };
+module.exports = { loadRules, rankSets, overlapCount, overlapMatrix, setsOverview, suggestSets, previewGenerated, saveSet, setHistory, usageBySet, recentOfTrack, isId };

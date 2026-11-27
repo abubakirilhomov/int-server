@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
  * Импорт банка вопросов собеседований из .docx в БД.
+ * Формат определяется сам: JS-банк (H1, J22…) или Python-банк (M3-05…).
+ * Python: вопросы раздела 5 (ещё не пройденные модули) — неактивные (notCovered),
+ * правило набора — в Setting questionBankRules.value.tracks["backend-python"].
  *
  *   node scripts/import-question-bank.js <путь/к/bank.docx> [--dry-run] [--force]
  *
@@ -18,6 +21,8 @@ const path = require("path");
 const mongoose = require("mongoose");
 const { readDocxBlocks } = require("../src/utils/questionBank/docxReader");
 const { parseBank, validateBank } = require("../src/utils/questionBank/parseBank");
+const { parsePythonBank, validatePythonBank, isPythonBank } = require("../src/utils/questionBank/parseBankPython");
+const BankQuestion = require("../src/models/bankQuestionModel");
 const { applyBank } = require("../src/services/questionBankImport");
 
 async function main() {
@@ -35,8 +40,16 @@ async function main() {
     process.exit(2);
   }
 
-  const parsed = parseBank(readDocxBlocks(fs.readFileSync(file)));
-  const { errors, warnings } = validateBank(parsed);
+  const blocks = readDocxBlocks(fs.readFileSync(file));
+  const python = isPythonBank(blocks);
+  const parsed = python ? parsePythonBank(blocks) : parseBank(blocks);
+  await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
+  // Python: HTML/CSS (модули 1–2) берутся из JS-банка — сверяем, что они там есть.
+  const jsBank = python && parsed.rules.extras
+    ? await BankQuestion.find({ code: { $in: parsed.rules.extras.codes } }).select("code topic tracks level isActive").lean()
+    : null;
+  const { errors, warnings } = python ? validatePythonBank(parsed, { jsBank }) : validateBank(parsed);
+  console.log(`Формат: ${python ? "Python-банк (модули M3…)" : "JS-банк"}`);
   const byTopic = {};
   parsed.questions.forEach((q) => { byTopic[q.topic] = (byTopic[q.topic] || 0) + 1; });
   const setsByTrack = {};
@@ -47,19 +60,27 @@ async function main() {
   console.log(`  amaliy: ${parsed.questions.filter((q) => q.isPractical).length}, mini: ${parsed.questions.filter((q) => q.isMiniTask).length}`);
   console.log(`Наборов: ${JSON.stringify(setsByTrack)}, размеры: ${sizes.join(",")}`);
   console.log(`Conflict-групп: ${parsed.rules.conflictGroups.length}`);
+  if (python) {
+    const off = parsed.questions.filter((q) => !q.isActive);
+    console.log(`  активных: ${parsed.questions.length - off.length}, ещё не пройдено (неактивные): ${off.length}`);
+    console.log(`  редакторы: ${JSON.stringify(parsed.questions.reduce((a, q) => { const k = q.editor || "текст"; a[k] = (a[k] || 0) + 1; return a; }, {}))}`);
+    console.log(`  правило: квоты модулей ${Object.keys(parsed.rules.quotas).join("/")}, amaliy ${parsed.rules.minPractical} ${JSON.stringify(parsed.rules.minPracticalBySize)}, HTML/CSS ${parsed.rules.extras ? parsed.rules.extras.codes.join(",") : "—"}`);
+  }
   warnings.forEach((w) => console.log(`  ⚠ ${w}`));
   errors.forEach((e) => console.log(`  ✖ ${e}`));
+  console.log(`Нарушений правила в готовых наборах: ${errors.length}`);
   if (errors.length && !force) {
     console.error(`Ошибок: ${errors.length} — импорт остановлен (--force, чтобы всё равно записать).`);
+    await mongoose.disconnect();
     process.exit(1);
   }
 
-  await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
   try {
     const report = await applyBank(parsed, { dryRun });
     const fmt = (r) => `создано ${r.created}, обновлено ${r.updated}, без изменений ${r.unchanged}, пропущено (правки админа) ${r.skippedEdited.length}`;
     console.log(`${dryRun ? "[dry-run] " : ""}Вопросы: ${fmt(report.questions)}`);
     console.log(`${dryRun ? "[dry-run] " : ""}Наборы:  ${fmt(report.sets)}`);
+    if (report.rules) console.log(`${dryRun ? "[dry-run] " : ""}Правило трека: ${report.rules}`);
     [...report.questions.skippedEdited, ...report.sets.skippedEdited].forEach((k) => console.log(`  ⚠ пропущено: ${k}`));
   } finally {
     await mongoose.disconnect();

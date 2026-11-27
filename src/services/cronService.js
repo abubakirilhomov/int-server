@@ -173,7 +173,7 @@ class CronService {
                 minute: "2-digit",
             }).format(new Date(d));
 
-        const TRACK = { "frontend-react": "Frontend React", "frontend-vue": "Frontend Vue", "backend-nodejs": "Backend Node" };
+        const TRACK = Object.fromEntries(Object.entries(require("../config/questionBankTopics").TRACK_LABELS).map(([k, v]) => [k, v.ru]));
         const lines = [`📋 Собеседования сегодня (${interviews.length}):`, ""];
         for (const iv of interviews) {
             const a = iv.application || {};

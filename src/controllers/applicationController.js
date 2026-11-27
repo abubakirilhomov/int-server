@@ -12,6 +12,8 @@ const AppError = require("../utils/AppError");
 const { notifyApplication, SPHERE_LABELS, SHIFT_LABELS } =
   require("../services/telegramService");
 
+const { ACTIVE_TRACKS } = require("../config/questionBankTopics");
+
 const DEDUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const ACTIVE_STATUSES = ["pending", "contacted", "interview_scheduled"];
 
@@ -56,7 +58,9 @@ exports.getFormData = catchAsync(async (req, res) => {
     };
   });
 
-  const spheres = Application.SPHERES.map((value) => ({
+  // В форме — только направления найма (JS · React, JS · Vue, Python). Старые сферы
+  // остаются в модели ради истории и принимаются валидатором (закешированные формы).
+  const spheres = ACTIVE_TRACKS.filter((v) => Application.SPHERES.includes(v)).map((value) => ({
     value,
     label: SPHERE_LABELS[value] || value,
   }));

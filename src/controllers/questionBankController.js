@@ -7,6 +7,7 @@ const { translationStatus } = require("../utils/questionBank/i18n");
 const { translationStats } = require("../services/questionTranslations");
 const { interviewModes } = require("../services/candidateInterviewMode");
 const admin = require("../services/questionBankAdmin");
+const { TRACK_DEFS, TOPIC_LABELS } = require("../config/questionBankTopics");
 
 const actorId = (req) => req.user?.id || req.user?._id || "admin";
 // Ошибки с деталями (наборы, которым мешает правка; результат проверки набора).
@@ -69,9 +70,20 @@ exports.updateSet = catchAsync(async (req, res) => {
   } catch (e) { withDetails(e, res); }
 });
 
+// Правило набора на трек (квоты по темам JS / по модулям Python, уровни, amaliy, extras).
+exports.getRules = catchAsync(async (req, res) => {
+  res.json(await admin.getRules(String(req.params.track || "")));
+});
+
+exports.updateRules = catchAsync(async (req, res) => {
+  try {
+    res.json(await admin.updateRules(String(req.params.track || ""), req.body || {}, actorId(req)));
+  } catch (e) { withDetails(e, res); }
+});
+
 // Сводка без текста вопросов — для смоков и дашборда.
 exports.stats = catchAsync(async (req, res) => {
-  const [byTopic, sets, translations, modes, demos] = await Promise.all([
+  const [byTopic, sets, translations, modes, demos, notCovered] = await Promise.all([
     BankQuestion.aggregate([
       { $match: { isActive: true } },
       { $group: { _id: "$topic", count: { $sum: 1 }, practical: { $sum: { $cond: ["$isPractical", 1, 0] } } } },
@@ -86,6 +98,10 @@ exports.stats = catchAsync(async (req, res) => {
       { $match: { isActive: true, "demo.html": { $exists: true, $ne: "" } } },
       { $group: { _id: { $ifNull: ["$demo.audience", "candidate"] }, count: { $sum: 1 } } },
     ]),
+    BankQuestion.aggregate([
+      { $match: { isActive: false, notCovered: true } },
+      { $group: { _id: "$topic", count: { $sum: 1 } } },
+    ]),
   ]);
   const topics = Object.fromEntries(byTopic.map((t) => [t._id, t.count]));
   res.json({
@@ -96,5 +112,8 @@ exports.stats = catchAsync(async (req, res) => {
     translations, // { ok, stale, missing } — русский перевод
     modes, // трек → "live" (есть наборы) | "checklist"
     demos: Object.fromEntries(demos.map((d) => [d._id, d.count])), // живые сцены: candidate / interviewer
+    notCovered: Object.fromEntries(notCovered.map((t) => [t._id, t.count])), // «ещё не пройдено» по темам
+    tracks: TRACK_DEFS, // направления: подписи, active (в выборе) / архивное
+    topicLabels: TOPIC_LABELS,
   });
 });

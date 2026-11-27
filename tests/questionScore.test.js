@@ -78,7 +78,7 @@ describe("конфиг (ответы Абубакира на §9, 27.11)", () =>
       accessWindow: { beforeMinutes: 30, afterMinutes: 180 },
       revokeOnFinish: true, languages: ["uz", "ru"], defaultLanguage: "uz", sandboxProvider: "sandpack",
     });
-    expect(cfg.bankTracks).toEqual(["frontend-react", "frontend-vue", "backend-nodejs"]);
+    expect(cfg.bankTracks).toEqual(["frontend-react", "frontend-vue", "backend-nodejs", "backend-python"]);
   });
 
   test("порог 80% не зависит от interviewSettings; partial — из него", () => {

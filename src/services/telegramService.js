@@ -2,11 +2,13 @@ const Setting = require("../models/settingModel");
 const Branch = require("../models/branchModel");
 const Mentor = require("../models/mentorModel");
 
+// Модель найма 27.11: направления JS · React, JS · Vue, Python (config/questionBankTopics
+// TRACK_DEFS). Остальные подписи — для старых заявок.
 const SPHERE_LABELS = {
-  "backend-nodejs": "Backend Node",
-  "backend-python": "Backend Python",
-  "frontend-react": "Frontend React",
-  "frontend-vue": "Frontend Vue",
+  "frontend-react": "JS · React",
+  "frontend-vue": "JS · Vue",
+  "backend-python": "Python",
+  "backend-nodejs": "Backend Node (архив)",
   "mern-stack": "React + Python",
   "full-stack": "React + Node",
 };

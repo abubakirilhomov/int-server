@@ -11,10 +11,16 @@
 // `exclude` (последние собеседования трека и прошлые попытки кандидата) —
 // повторы не нарушение правила: отдаются отдельно в `repeated`, минимальными.
 //
+// Правило — на трек (utils/questionBank/trackRules): JS — квоты по темам, Python —
+// по модулям, amaliy может зависеть от размера (Python: 6, на 20 — 7). extras —
+// вопросы чужого банка сверх основного состава (Python: 0–2 HTML/CSS из JS-банка),
+// подбираются из списка правила, свежие (не из `exclude`) первыми.
+//
 // Алгоритм: случайный жадный подбор с повторами, лучший по числу мягких нарушений.
 const { levelQuota } = require("./setLevels");
-const { topicQuota } = require("./topicQuota");
 const { TOPICS } = require("../../config/questionBankTopics");
+const { trackRules, minPracticalFor, quotaFor } = require("./trackRules");
+const { groupsOf } = require("./conflicts");
 
 const LEVELS = ["oson", "orta", "qiyin"];
 const LEVEL_RANK = { oson: 0, orta: 1, qiyin: 2 };
@@ -55,9 +61,10 @@ function attempt(pool, groups, want, rng, avoid) {
     for (const q of cands) {
       if (!need) break;
       if (used.has(q.code) || !left[q.level]) continue;
-      if (q.conflictGroup && conflicts.has(q.conflictGroup)) continue;
+      const gs = groupsOf(q);
+      if (gs.some((g) => conflicts.has(g))) continue;
       used.add(q.code);
-      if (q.conflictGroup) conflicts.add(q.conflictGroup);
+      gs.forEach((g) => conflicts.add(g));
       left[q.level] -= 1;
       picked.push(q);
       need -= 1;
@@ -71,13 +78,15 @@ function attempt(pool, groups, want, rng, avoid) {
 // свежие вопросы и никогда не возьмёт мини-задание/amaliy из исключённых, даже
 // если иначе правило нарушится. Обмен не трогает квоты тем и уровней. Повтор
 // дешевле нарушения правила.
-function repairSoft(picked, pool, rules, avoid, rng) {
+function repairSoft(picked, pool, rules, avoid, rng, { minPractical = null, extra = [] } = {}) {
   let cur = picked.slice();
   const inPicked = (code) => cur.some((q) => q.code === code);
   const hasMini = pool.some((q) => q.isMiniTask);
+  const extraPractical = extra.filter((q) => q.isPractical).length;
+  const extraMini = extra.some((q) => q.isMiniTask);
   const state = (qs) => ({
-    mini: hasMini && !qs.some((q) => q.isMiniTask),
-    practical: rules?.minPractical != null ? Math.max(0, rules.minPractical - qs.filter((q) => q.isPractical).length) : 0,
+    mini: hasMini && !extraMini && !qs.some((q) => q.isMiniTask),
+    practical: minPractical != null ? Math.max(0, minPractical - extraPractical - qs.filter((q) => q.isPractical).length) : 0,
   });
   const score = (st) => (st.mini ? 1 : 0) + st.practical;
   for (let guard = 0; guard < 40; guard += 1) {
@@ -88,7 +97,8 @@ function repairSoft(picked, pool, rules, avoid, rng) {
       const out = cur[oi];
       for (const cand of shuffle(pool, rng)) {
         if (cand.topic !== out.topic || cand.level !== out.level || inPicked(cand.code)) continue;
-        if (cand.conflictGroup && cur.some((q, i) => i !== oi && q.conflictGroup === cand.conflictGroup)) continue;
+        const cg = groupsOf(cand);
+        if (cg.length && cur.some((q, i) => i !== oi && groupsOf(q).some((g) => cg.includes(g)))) continue;
         const next = cur.slice(); next[oi] = cand;
         const gain = score(st) - score(state(next));
         if (gain <= 0) continue;
@@ -102,14 +112,24 @@ function repairSoft(picked, pool, rules, avoid, rng) {
   return cur;
 }
 
-function softViolations(qs, rules, avoid, pool) {
+function softViolations(qs, minPractical, pool, requireMini) {
   const v = [];
   const practical = qs.filter((q) => q.isPractical).length;
-  if (rules?.minPractical != null && practical < rules.minPractical) {
-    v.push(`amaliy ${practical} < ${rules.minPractical}`);
+  if (minPractical != null && practical < minPractical) {
+    v.push(`amaliy ${practical} < ${minPractical}`);
   }
-  if (pool.some((q) => q.isMiniTask) && !qs.some((q) => q.isMiniTask)) v.push("нет мини-задания");
+  if ((requireMini || pool.some((q) => q.isMiniTask)) && !qs.some((q) => q.isMiniTask)) v.push("нет мини-задания");
   return v;
+}
+
+// extras трека: n вопросов из списка правила, свежие первыми.
+function pickExtras(questions, tr, n, avoid, rng) {
+  if (!n) return [];
+  const allowed = new Set(tr.extras?.codes || []);
+  const banned = new Set(tr.extras?.exclude || []);
+  const cands = (questions || []).filter((q) => q.isActive !== false && allowed.has(q.code) && !banned.has(q.code));
+  const ordered = [...shuffle(cands.filter((q) => !avoid.has(q.code)), rng), ...shuffle(cands.filter((q) => avoid.has(q.code)), rng)];
+  return ordered.slice(0, n);
 }
 
 /**
@@ -117,28 +137,38 @@ function softViolations(qs, rules, avoid, pool) {
  * @param {Array}  p.questions  вопросы банка {code, topic, tracks, level, isPractical, isMiniTask, conflictGroup, order, isActive}
  * @param {string} p.track
  * @param {number} p.size
- * @param {object} [p.rules]    Setting questionBankRules.value
+ * @param {object} [p.rules]    Setting questionBankRules.value или уже trackRules(…)
  * @param {Array}  [p.exclude]  коды, которых лучше избежать
+ * @param {number} [p.extras]   сколько вопросов из extras правила добавить сверх size
  * @returns {{codes: string[], violations: string[], repeated: string[]}}
  *   violations — нарушения правила (amaliy, мини-задание, квоты тем);
  *   repeated — коды из exclude, которые пришлось взять (информация, не нарушение).
  */
-function generateSet({ questions, track, size, rules, exclude = [], rng = Math.random, attempts = 400 }) {
-  const want = levelQuota(size, rules);
+function generateSet({ questions, track, size, rules, exclude = [], extras = 0, rng = Math.random, attempts = 400 }) {
+  const tr = trackRules(rules, track);
+  const want = levelQuota(size, tr);
   if (!want) throw new Error(`Нет правила уровней для набора из ${size}`);
+  const nExtra = Math.max(0, Math.min(Number(extras) || 0, tr.extras?.max ?? 0));
+  if (nExtra && tr.extras?.maxTotal && size + nExtra > tr.extras.maxTotal) {
+    throw new Error(`Всего вопросов ${size + nExtra} > ${tr.extras.maxTotal}: уменьшите основной набор`);
+  }
   const pool = (questions || []).filter((q) => q.isActive !== false && (q.tracks || []).includes(track));
-  const tq = topicQuota(rules, track, size);
+  const tq = quotaFor(tr, size);
   const allTopics = [...new Set(pool.map((q) => q.topic))];
   const avoid = new Set(exclude);
+  const extra = pickExtras(questions, tr, nExtra, avoid, rng);
+  const minPractical = minPracticalFor(tr, size + extra.length);
+  const extraGroups = new Set(extra.flatMap(groupsOf));
+  const basePool = extraGroups.size ? pool.filter((q) => !groupsOf(q).some((g) => extraGroups.has(g))) : pool;
 
   const search = (groups) => {
     let best = null;
     for (let i = 0; i < attempts; i += 1) {
-      const first = attempt(pool, groups, want, rng, avoid);
+      const first = attempt(basePool, groups, want, rng, avoid);
       if (!first) continue;
-      const picked = repairSoft(first, pool, rules, avoid, rng);
-      const violations = softViolations(picked, rules, avoid, pool);
-      const repeated = picked.filter((q) => avoid.has(q.code)).map((q) => q.code);
+      const picked = repairSoft(first, basePool, tr, avoid, rng, { minPractical, extra });
+      const violations = softViolations([...extra, ...picked], minPractical, basePool, tr.requireMiniTask === true);
+      const repeated = [...extra, ...picked].filter((q) => avoid.has(q.code)).map((q) => q.code);
       // Нарушение правила весит больше любого числа повторов.
       const cost = violations.length * 1000 + repeated.length;
       if (!best || cost < best.cost) best = { picked, violations, repeated, cost };
@@ -155,8 +185,9 @@ function generateSet({ questions, track, size, rules, exclude = [], rng = Math.r
   if (!best) {
     throw new Error(`Не удалось собрать набор ${track} из ${size}: в банке не хватает вопросов под правило уровней/тем`);
   }
-  const codes = sortSet(best.picked).map((q) => q.code);
-  return { codes, violations: best.violations, repeated: codes.filter((c) => avoid.has(c)) };
+  if (extra.length < nExtra) best.violations.push(`дополнительных вопросов в банке ${extra.length} из ${nExtra}`);
+  const codes = sortSet([...extra, ...best.picked]).map((q) => q.code);
+  return { codes, violations: best.violations, repeated: codes.filter((c) => avoid.has(c)), extras: extra.map((q) => q.code) };
 }
 
 module.exports = { generateSet, sortSet };

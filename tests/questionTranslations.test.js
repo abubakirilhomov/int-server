@@ -127,7 +127,7 @@ test("варианты ответа: перевод по ключу, отмет�
 describe("backend-трек", () => {
   test("импорт backend-банка: треки, наборы, квоты; режим live только при наличии наборов", async () => {
     expect(await resolveInterviewMode("backend-nodejs")).toBe("checklist");
-    expect(await interviewModes()).toEqual({ "frontend-react": "live", "frontend-vue": "live", "backend-nodejs": "checklist" });
+    expect(await interviewModes()).toEqual({ "frontend-react": "live", "frontend-vue": "live", "backend-nodejs": "checklist", "backend-python": "checklist" });
 
     const parsed = parseBank(syntheticBackendBlocks());
     const r = await applyBank(parsed);

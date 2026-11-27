@@ -6,6 +6,7 @@ const InterviewSet = require("../models/interviewSetModel");
 const Setting = require("../models/settingModel");
 
 const SOURCE = "docx";
+const { BP } = require("../config/questionBankTopics");
 
 async function upsertAll(Model, items, keyOf, toDoc, { dryRun }) {
   const report = { created: 0, updated: 0, unchanged: 0, skippedEdited: [] };
@@ -31,7 +32,27 @@ async function upsertAll(Model, items, keyOf, toDoc, { dryRun }) {
   return report;
 }
 
+// Правило трека из Python-банка: value.tracks[track]. Правило, которое правил
+// админ (updatedBy ≠ "import"), импорт не трогает — только сообщает.
+async function applyTrackRules(track, rules, { dryRun }) {
+  const doc = await Setting.findOne({ key: "questionBankRules" }).lean();
+  const cur = doc?.value?.tracks?.[track];
+  if (cur && cur.updatedBy && cur.updatedBy !== "import") return "skipped";
+  const next = { ...rules, updatedBy: "import" };
+  const strip = (r) => { if (!r) return null; const { updatedAt, ...rest } = r; return rest; };
+  if (cur && JSON.stringify(strip(cur)) === JSON.stringify(next)) return "unchanged";
+  if (!dryRun) {
+    await Setting.updateOne(
+      { key: "questionBankRules" },
+      { $set: { [`value.tracks.${track}`]: { ...next, updatedAt: new Date() } } },
+      { upsert: true }
+    );
+  }
+  return cur ? "updated" : "created";
+}
+
 async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) {
+  const isPython = parsed.format === "python";
   const questions = await upsertAll(
     BankQuestion,
     parsed.questions,
@@ -40,17 +61,23 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
       code: q.code, topic: q.topic, tracks: q.tracks, level: q.level, order: q.order,
       isPractical: q.isPractical, isMiniTask: q.isMiniTask, prompt: q.prompt, promptShort: q.promptShort,
       expectedAnswer: q.expectedAnswer, answerKind: q.answerKind, conflictGroup: q.conflictGroup,
-      isActive: true, source: sourceLabel, contentHash: q.contentHash,
+      isActive: isPython ? q.isActive : true, source: sourceLabel, contentHash: q.contentHash,
+      ...(isPython ? { editor: q.editor || undefined, subtopic: q.subtopic || null, notCovered: Boolean(q.notCovered) } : {}),
     }),
     { dryRun }
   );
   // Правила составления наборов (квоты/уровни/conflict-группы) — только коды и
   // числа, без текста вопросов. Пишутся ДО наборов: по ним InterviewSet
-  // проверяет состав по уровням при создании.
-  if (!dryRun && parsed.rules) {
+  // проверяет состав по уровням при создании. JS-банк пишет общие поля и не
+  // трогает value.tracks (правила треков: Python, правки из админки).
+  let rules = null;
+  if (parsed.rules && isPython) {
+    rules = await applyTrackRules(parsed.track || BP, parsed.rules, { dryRun });
+  } else if (!dryRun && parsed.rules) {
+    const { levels, minPractical, quotas, conflictGroups } = parsed.rules;
     await Setting.updateOne(
       { key: "questionBankRules" },
-      { $set: { value: parsed.rules } },
+      { $set: { "value.levels": levels, "value.minPractical": minPractical, "value.quotas": quotas, "value.conflictGroups": conflictGroups } },
       { upsert: true }
     );
   }
@@ -64,7 +91,7 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
     }),
     { dryRun }
   );
-  return { questions, sets };
+  return { questions, sets, rules };
 }
 
-module.exports = { applyBank };
+module.exports = { applyBank, applyTrackRules };

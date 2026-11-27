@@ -11,11 +11,11 @@ const BankQuestion = require("../models/bankQuestionModel");
 const InterviewSet = require("../models/interviewSetModel");
 const Setting = require("../models/settingModel");
 const AppError = require("../utils/AppError");
-const { TOPICS, BANK_TRACKS, CODE_PATTERN, EDITORS, TOPIC_DEFS } = require("../config/questionBankTopics");
+const { TOPICS, BANK_TRACKS, CODE_PATTERN, EDITORS, defOfCode, TRACK_DEFS, TOPIC_DEFS } = require("../config/questionBankTopics");
 const { normalizeDemo, normalizeDemoFix } = require("../utils/questionBank/demo");
 const { normalizeTests } = require("../utils/questionBank/tests");
 const { uzTextHash, translationStatus } = require("../utils/questionBank/i18n");
-const { checkSetLevels, fmt } = require("../utils/questionBank/setLevels");
+const { trackRules, checkComposition, validateTrackRules } = require("../utils/questionBank/trackRules");
 
 const LEVELS = BankQuestion.LEVELS;
 const ANSWER_KINDS = BankQuestion.ANSWER_KINDS;
@@ -79,6 +79,13 @@ function parsePatch(body) {
       set[f] = body[f];
     }
   }
+  // Включили вопрос ещё не пройденного модуля — он теперь обычный активный.
+  if (set.isActive === true) set.notCovered = false;
+  if (body.subtopic !== undefined) {
+    const t = body.subtopic === null ? "" : String(body.subtopic).trim();
+    if (t.length > 40) throw new AppError("subtopic: длиннее 40 символов", 400);
+    set.subtopic = t || null;
+  }
   if (body.answerKind !== undefined) {
     if (!ANSWER_KINDS.includes(body.answerKind)) throw new AppError(`answerKind: ${ANSWER_KINDS.join(" | ")}`, 400);
     set.answerKind = body.answerKind;
@@ -105,7 +112,7 @@ function parsePatch(body) {
   return set;
 }
 
-// Активные наборы, которым правка сломает состав/принадлежность.
+// Активные наборы, которым правка сломает состав/принадлежность (правило трека набора).
 async function setsBrokenBy(code, { level, tracks, isActive }) {
   if (level === undefined && tracks === undefined && isActive === undefined) return [];
   const [sets, rules] = await Promise.all([
@@ -114,17 +121,23 @@ async function setsBrokenBy(code, { level, tracks, isActive }) {
   ]);
   if (!sets.length) return [];
   const codes = [...new Set(sets.flatMap((s) => s.questionCodes))];
-  const bank = await BankQuestion.find({ code: { $in: codes } }).select("code level").lean();
-  const levelOf = new Map(bank.map((q) => [q.code, q.level]));
-  if (level !== undefined) levelOf.set(code, level);
+  const bank = await BankQuestion.find({ code: { $in: codes } })
+    .select("code level topic tracks isPractical isMiniTask conflictGroup order").lean();
+  const byCode = new Map(bank.map((q) => [q.code, { ...q }]));
+  const edited = byCode.get(code);
+  if (edited && level !== undefined) edited.level = level;
+  if (edited && tracks !== undefined) edited.tracks = tracks;
   const broken = [];
   for (const s of sets) {
     let why = null;
     if (isActive === false) why = "вопрос архивируется";
-    else if (tracks !== undefined && !tracks.includes(s.track)) why = `вопрос уходит из направления ${s.track}`;
-    else if (level !== undefined) {
-      const r = checkSetLevels(s.questionCodes.map((c) => levelOf.get(c)), rules?.value);
-      if (!r.ok) why = `уровни станут ${fmt(r.got)}, по правилу ${fmt(r.want)}`;
+    else if (tracks !== undefined && !tracks.includes(s.track) && !(s.questionCodes.includes(code) && trackRules(rules?.value, s.track).extras?.codes?.includes(code))) {
+      why = `вопрос уходит из направления ${s.track}`;
+    } else {
+      const before = checkComposition(s.questionCodes.map((c) => bank.find((q) => q.code === c)).filter(Boolean), trackRules(rules?.value, s.track));
+      const after = checkComposition(s.questionCodes.map((c) => byCode.get(c)).filter(Boolean), trackRules(rules?.value, s.track));
+      const fresh = after.block.filter((m) => !before.block.includes(m));
+      if (fresh.length) why = fresh.map((m) => m.replace(/^уровни /, "уровни станут ")).join("; ");
     }
     if (why) broken.push({ _id: s._id, track: s.track, number: s.number, reason: why });
   }
@@ -190,8 +203,8 @@ async function updateQuestion(code, body, actor) {
 
 async function createQuestion(body, actor) {
   const code = String(body?.code || "").trim().toUpperCase();
-  if (!CODE_RE.test(code)) throw new AppError(`code: формат ${CODE_PATTERN} (буква темы + номер, напр. J26)`, 400);
-  const prefix = TOPIC_DEFS.find((d) => d.prefix === code[0]);
+  if (!CODE_RE.test(code)) throw new AppError("code: буква темы + номер (J26) или модуль-номер Python (M4-26)", 400);
+  const prefix = defOfCode(code);
   const patch = parsePatch(body);
   const topic = patch.topic || prefix?.topic;
   if (!patch.prompt) throw new AppError("prompt: не может быть пустым", 400);
@@ -230,34 +243,88 @@ async function checkSet({ track, questionCodes, ignoreSetId }) {
   const codes = questionCodes.map((c) => c.trim());
   if (new Set(codes).size !== codes.length) block.push("в наборе есть повторы");
   const [bank, rules] = await Promise.all([
-    BankQuestion.find({ code: { $in: codes } }).select("code level tracks isActive isPractical conflictGroup").lean(),
+    BankQuestion.find({ code: { $in: codes } })
+      .select("code level topic tracks isActive notCovered isPractical isMiniTask conflictGroup order").lean(),
     Setting.findOne({ key: "questionBankRules" }).lean(),
   ]);
   const byCode = new Map(bank.map((q) => [q.code, q]));
   const missing = codes.filter((c) => !byCode.has(c));
   if (missing.length) block.push(`нет в банке: ${missing.join(", ")}`);
   const known = codes.map((c) => byCode.get(c)).filter(Boolean);
-  const archived = known.filter((q) => !q.isActive).map((q) => q.code);
+  const notCovered = known.filter((q) => !q.isActive && q.notCovered).map((q) => q.code);
+  if (notCovered.length) block.push(`ещё не пройдено: ${notCovered.join(", ")}`);
+  const archived = known.filter((q) => !q.isActive && !q.notCovered).map((q) => q.code);
   if (archived.length) block.push(`в архиве: ${archived.join(", ")}`);
-  const foreign = known.filter((q) => !(q.tracks || []).includes(track)).map((q) => q.code);
-  if (foreign.length) block.push(`не из направления ${track}: ${foreign.join(", ")}`);
-  const levels = checkSetLevels(known.map((q) => q.level), rules?.value);
-  if (!missing.length && !levels.ok) {
-    block.push(`уровни ${fmt(levels.got)}, по правилу ${fmt(levels.want)} (oson/o'rta/qiyin) — собеседования должны быть одинаковыми по сложности`);
-  }
-  const groups = new Map();
-  known.forEach((q) => { if (q.conflictGroup) groups.set(q.conflictGroup, [...(groups.get(q.conflictGroup) || []), q.code]); });
-  for (const [g, list] of groups) if (list.length > 1) warn.push(`одна идея в одном наборе (${g}): ${list.join(", ")}`);
-  const practical = known.filter((q) => q.isPractical).length;
-  if (rules?.value?.minPractical != null && practical < rules.value.minPractical) {
-    warn.push(`amaliy ${practical} < ${rules.value.minPractical}`);
-  }
+  const tr = trackRules(rules?.value, track);
+  const comp = checkComposition(known, tr);
+  const levels = comp.levels;
+  comp.block.forEach((m) => { if (!(missing.length && m.startsWith("уровни"))) block.push(m); });
+  warn.push(...comp.warn);
   const dup = await InterviewSet.findOne({
     track, isActive: true, questionCodes: { $all: codes, $size: codes.length },
     ...(ignoreSetId ? { _id: { $ne: ignoreSetId } } : {}),
   }).select("number").lean();
   if (dup) warn.push(`такой же набор уже есть: №${dup.number}`);
-  return { ok: block.length === 0, block, warn, levels: { got: levels.got, want: levels.want }, size: codes.length };
+  return {
+    ok: block.length === 0, block, warn, levels: { got: levels.got, want: levels.want },
+    size: codes.length, baseSize: comp.baseSize, extras: comp.extras,
+  };
+}
+
+// ─── Правило набора на трек ─────────────────────────────────────────────────
+
+const RULE_FIELDS = ["levels", "quotas", "minPractical", "minPracticalBySize", "requireMiniTask", "extras"];
+
+// Действующее правило трека + темы, по которым задаются квоты (для редактора правила).
+async function getRules(track) {
+  if (!BANK_TRACKS.includes(track)) throw new AppError(`track: ${BANK_TRACKS.join(" | ")}`, 400);
+  const doc = await Setting.findOne({ key: "questionBankRules" }).lean();
+  const tr = trackRules(doc?.value, track);
+  const { __trackRules, ...rules } = tr;
+  const topics = TOPIC_DEFS.filter((d) => d.tracks.includes(track)).map((d) => ({ topic: d.topic, label: d.label }));
+  const counts = await BankQuestion.aggregate([
+    { $match: { tracks: track } },
+    { $group: { _id: { topic: "$topic", active: "$isActive" }, n: { $sum: 1 } } },
+  ]);
+  const inBank = {};
+  counts.forEach((c) => {
+    inBank[c._id.topic] = inBank[c._id.topic] || { active: 0, inactive: 0 };
+    inBank[c._id.topic][c._id.active ? "active" : "inactive"] += c.n;
+  });
+  return { track, def: TRACK_DEFS.find((d) => d.track === track) || null, rules, topics, inBank };
+}
+
+// Сохранить правило трека из админки (перекрывает общее и импорт; повторный импорт его не тронет).
+// Активные наборы, которые новое правило ломает (уровни), — отказ 422 со списком.
+async function updateRules(track, body, actor) {
+  if (!BANK_TRACKS.includes(track)) throw new AppError(`track: ${BANK_TRACKS.join(" | ")}`, 400);
+  const input = Object.fromEntries(RULE_FIELDS.filter((k) => body?.[k] !== undefined).map((k) => [k, body[k]]));
+  if (!Object.keys(input).length) throw new AppError(`Нужно хотя бы одно поле: ${RULE_FIELDS.join(", ")}`, 400);
+  const { errors, value } = validateTrackRules(input);
+  if (errors.length) throw new AppError(`Правило не сохранено: ${errors.join("; ")}`, 400);
+  const doc = await Setting.findOne({ key: "questionBankRules" }).lean();
+  const cur = trackRules(doc?.value, track);
+  const { __trackRules, source, updatedBy, updatedAt, track: _t, unit, ...curRules } = cur;
+  const next = { ...curRules, ...value, updatedBy: String(actor || "admin"), updatedAt: new Date() };
+
+  const sets = await InterviewSet.find({ track, isActive: true }).select("number questionCodes").lean();
+  const codes = [...new Set(sets.flatMap((s) => s.questionCodes))];
+  const bank = await BankQuestion.find({ code: { $in: codes } })
+    .select("code level topic tracks isPractical isMiniTask conflictGroup order").lean();
+  const byCode = new Map(bank.map((q) => [q.code, q]));
+  const trNext = trackRules({ tracks: { [track]: next } }, track);
+  const broken = sets
+    .map((s) => ({ s, r: checkComposition(s.questionCodes.map((c) => byCode.get(c)).filter(Boolean), trNext) }))
+    .filter((x) => x.r.block.length)
+    .map((x) => ({ _id: x.s._id, track, number: x.s.number, reason: x.r.block.join("; ") }));
+  if (broken.length) {
+    const e = new AppError(`Правило ломает активные наборы (${broken.map((x) => `№${x.number}: ${x.reason}`).join("; ")}). Сначала измените или архивируйте их.`, 422);
+    e.sets = broken;
+    throw e;
+  }
+
+  await Setting.updateOne({ key: "questionBankRules" }, { $set: { [`value.tracks.${track}`]: next } }, { upsert: true });
+  return getRules(track);
 }
 
 async function createSet({ track, questionCodes }, actor) {
@@ -297,4 +364,5 @@ async function updateSet(id, body, actor) {
 
 module.exports = {
   parsePatch, updateQuestion, createQuestion, getQuestion, checkSet, createSet, updateSet, view, SELECT_ALL,
+  getRules, updateRules,
 };

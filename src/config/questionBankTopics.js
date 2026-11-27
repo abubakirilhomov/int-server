@@ -55,7 +55,8 @@ const TOPIC_DEFS = [
   { prefix: "R", editor: "jsx", topic: "react", tracks: [FR], codeLang: "jsx", names: ["React"], label: { uz: "React", ru: "React" } },
   { prefix: "V", editor: "vue", topic: "vue", tracks: [FV], codeLang: "vue", names: ["Vue"], label: { uz: "Vue", ru: "Vue" } },
   { prefix: "T", editor: "tailwind", topic: "tailwind", tracks: [FV], codeLang: "html", names: ["Tailwind CSS", "Tailwind"], label: { uz: "Tailwind CSS", ru: "Tailwind CSS" } },
-  { prefix: "N", editor: "node", topic: "node", tracks: [BN], codeLang: "js", names: ["Node.js", "Node"], label: { uz: "Node.js", ru: "Node.js" } },
+  // Node.js в направлении JS (Абубакир 27.11): JS · React и JS · Vue = фронт + Node.
+  { prefix: "N", editor: "node", topic: "node", tracks: [FR, FV, BN], codeLang: "js", names: ["Node.js", "Node"], label: { uz: "Node.js", ru: "Node.js" } },
   { prefix: "E", editor: "node", topic: "express", tracks: [BN], codeLang: "js", names: ["Express.js", "Express"], label: { uz: "Express", ru: "Express" } },
   { prefix: "D", editor: "node", topic: "database", tracks: [BN], codeLang: "js", names: ["MongoDB", "Ma'lumotlar bazasi", "SQL"], label: { uz: "Ma'lumotlar bazasi", ru: "Базы данных" } },
   { prefix: "A", editor: "node", topic: "api", tracks: [BN], codeLang: "js", names: ["API va HTTP", "API", "HTTP"], label: { uz: "API va HTTP", ru: "API и HTTP" } },

@@ -116,7 +116,7 @@ describe("backend-трек в docx", () => {
   test("N/E/D/A → темы backend, набор трека backend-nodejs, квоты, заявленные количества", () => {
     const parsed = parseBank(syntheticBackendBlocks());
     expect(parsed.questions.map((q) => [q.code, q.topic, q.tracks])).toEqual([
-      ["N1", "node", ["backend-nodejs"]], ["E1", "express", ["backend-nodejs"]],
+      ["N1", "node", ["frontend-react", "frontend-vue", "backend-nodejs"]], ["E1", "express", ["backend-nodejs"]],
       ["D1", "database", ["backend-nodejs"]], ["A1", "api", ["backend-nodejs"]],
     ]);
     expect(parsed.questions[3].prompt).toContain("```js\napp.get('/x', h);\n```");

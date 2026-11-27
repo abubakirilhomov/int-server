@@ -100,7 +100,27 @@ function syntheticBackendBlocks() {
   ];
 }
 
-module.exports = { syntheticBlocks, syntheticBackendBlocks };
+// Синтетический банк Node (формат «mars-intern-savollar-node»): только N-вопросы,
+// без наборов; правило набора в файле есть, но только как текст-предложение.
+function syntheticNodeBlocks() {
+  return [
+    { type: "p", text: "Sintetik intern suhbati: Node.js savollar banki", style: "Title", mono: false },
+    h1("2. JS to'plamlariga qo'shish qoidasi (taklif)"),
+    p("JS · React yo'nalishi (hozir → taklif):"),
+    table([["Mavzu", "15 savol", "18 savol"], ["JavaScript", "5 → 4", "6 → 5"], ["Node.js", "0 → 3", "0 → 4"]]),
+    p("Daraja: 18 savolda 4 oson (isinish uchun) + 9 o'rta + 5 qiyin; 15 savolda 3 + 8 + 4; 20 savolda 4 + 11 + 5."),
+    p("Bir xil g'oyani tekshiradigan savollar bitta suhbatga tushmaydi: N1, N3; N2, N3."),
+    h1("3. Savollar banki — Node.js / Express"),
+    h2("Node.js (3 ta)"),
+    { type: "p", text: "1) Sintetik bo'lim — 3 ta (N1–N3)", style: "Heading3", mono: false },
+    ...q("N1", "oson", true, "Sintetik Node savol 1.", "Sintetik javob N1.", ["app.use(x);"]),
+    p("Baholash: ✓ — sintetik mezon."),
+    ...q("N2", "o'rta", false, "Mini-topshiriq: sintetik Node savol 2.", "Sintetik javob N2."),
+    ...q("N3", "qiyin", true, "Sintetik Node savol 3.", "Sintetik javob N3."),
+  ];
+}
+
+module.exports = { syntheticBlocks, syntheticBackendBlocks, syntheticNodeBlocks };
 
 // Синтетический Python-банк (формат «mars-intern-savollar-python»): ID с модулем (M3-01),
 // раздел 4 — пройденные модули, раздел 5 — ещё не пройденные (импорт неактивными),

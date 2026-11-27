@@ -3,6 +3,7 @@
 // банка в репозитории не хранится — тесты используют синтетические блоки.
 const crypto = require("crypto");
 const { checkSetLevels, fmt } = require("./setLevels");
+const { groupIdsByCode } = require("./conflicts");
 const { PREFIX, CODE_LANG, PREFIX_CHARS, CODE_PATTERN, APOS, topicByName } = require("../../config/questionBankTopics");
 
 const LEVEL_RE = new RegExp(`^(oson|o${APOS}rta|qiyin)$`, "i");
@@ -201,9 +202,12 @@ function parseBank(blocks) {
   }
   flush();
 
+  // Банк Node (27.11): только N-вопросы и без наборов — дополняет JS-банк, а не
+  // заменяет его. Импортируется неактивным, общее правило не трогает; id его
+  // conflict-групп с префиксом «n», чтобы не совпасть с g1… JS-банка.
+  const format = questions.length && !sets.length && questions.every((q) => q.topic === "node") ? "node" : "js";
   // promptShort: из таблиц наборов 1–5, иначе начало вопроса.
-  const groupOf = {};
-  rules.conflictGroups.forEach((g, i) => g.forEach((c) => { groupOf[c] = `g${i + 1}`; }));
+  const groupOf = groupIdsByCode(rules.conflictGroups, format === "node" ? "n" : "g");
   for (const q of questions) {
     const first = q.prompt.split("\n")[0];
     q.promptShort = shortByCode[q.code] || (first.length > 140 ? first.slice(0, 137) + "…" : first);
@@ -220,7 +224,7 @@ function parseBank(blocks) {
     s.contentHash = sha({ track: s.track, number: s.number, questionCodes: s.questionCodes });
   }
 
-  return { questions, sets, rules, declaredCounts, warnings };
+  return { format, questions, sets, rules, declaredCounts, warnings };
 }
 
 // Проверки: errors — импорт нельзя; warnings — показать и продолжить.

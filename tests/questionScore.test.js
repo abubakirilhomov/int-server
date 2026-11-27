@@ -27,18 +27,17 @@ describe("computeQuestionScore (живой режим)", () => {
   });
 });
 
-describe("равный вес по умолчанию (§9.2, 27.11)", () => {
-  test("без levelWeights все уровни весят 1: 1 pass + 1 partial + 1 fail = 50%", () => {
+describe("вес по уровню по умолчанию 1/2/3 (поправка Абубакира 27.11)", () => {
+  test("без levelWeights: oson 1, o'rta 2, qiyin 3", () => {
     const r = computeQuestionScore(items, { partialCredit: 0.5, threshold: 80 });
-    expect(r.total).toBe(3);
-    expect(r.earned).toBe(1.5);
-    expect(r.percentage).toBe(50);
-    expect(r.snapItems.map((s) => s.weight)).toEqual([1, 1, 1]);
+    expect(r.total).toBe(6);
+    expect(r.snapItems.map((s) => s.weight)).toEqual([1, 2, 3]);
   });
 
-  test("с весами конфига: 4 из 5 pass = 80% → прошёл (порог включительно)", () => {
+  test("с конфигом: 80% от максимума набора → прошёл (порог включительно)", () => {
     const cfg = mergeConfig();
-    const five = ["oson", "orta", "qiyin", "qiyin", "orta"].map((level, i) => ({ level, topic: "js", result: i < 4 ? "pass" : "fail" }));
+    // max = 1+2+2+3+2 = 10; провален один o'rta (2) → 8/10 = 80%
+    const five = ["oson", "orta", "orta", "qiyin", "orta"].map((level, i) => ({ level, topic: "js", result: i === 4 ? "fail" : "pass" }));
     const r = computeQuestionScore(five, { levelWeights: cfg.levelWeights, partialCredit: cfg.partialCredit, threshold: cfg.passThreshold });
     expect(r.percentage).toBe(80);
     expect(r.passed).toBe(true);
@@ -50,7 +49,7 @@ describe("конфиг (ответы Абубакира на §9, 27.11)", () =>
     const cfg = mergeConfig();
     expect(cfg).toMatchObject({
       format: "mixed", recordSignals: true, blockPaste: false,
-      levelWeights: { oson: 1, orta: 1, qiyin: 1 },
+      levelWeights: { oson: 1, orta: 2, qiyin: 3 },
       passThreshold: 80, partialCredit: 0.5,
       conductorRoles: ["admin"],
       accessWindow: { beforeMinutes: 30, afterMinutes: 180 },
@@ -65,9 +64,9 @@ describe("конфиг (ответы Абубакира на §9, 27.11)", () =>
   });
 
   test("Setting candidateInterviewSettings перекрывает поля, вложенные — частично", () => {
-    const cfg = mergeConfig({ levelWeights: { qiyin: 2 }, passThreshold: 70 }, { passThreshold: 90 });
-    expect(cfg.levelWeights).toEqual({ oson: 1, orta: 1, qiyin: 2 });
+    const cfg = mergeConfig({ levelWeights: { qiyin: 4 }, passThreshold: 70 }, { passThreshold: 90 });
+    expect(cfg.levelWeights).toEqual({ oson: 1, orta: 2, qiyin: 4 });
     expect(cfg.passThreshold).toBe(70);
-    expect(DEFAULTS.levelWeights.qiyin).toBe(1);
+    expect(DEFAULTS.levelWeights.qiyin).toBe(3);
   });
 });

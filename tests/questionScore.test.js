@@ -2,36 +2,59 @@ const { computeQuestionScore } = require("../src/utils/scoreInterview");
 const { mergeConfig, DEFAULTS } = require("../src/config/candidateInterviews");
 
 const items = [
-  { code: "H1", topic: "html", level: "oson", result: "pass" }, // 1/1
-  { code: "J1", topic: "js", level: "orta", result: "partial" }, // 1/2
-  { code: "R1", topic: "react", level: "qiyin", result: "fail" }, // 0/3
-  { code: "R2", topic: "react", level: "qiyin", result: null }, // не оценён
+  { code: "H1", topic: "html", level: "oson", state: "closed", result: "pass" }, // 1/1
+  { code: "J1", topic: "js", level: "orta", state: "closed", result: "partial" }, // 1/2
+  { code: "R1", topic: "react", level: "qiyin", state: "closed", result: "fail" }, // 0/3
+  { code: "R2", topic: "react", level: "qiyin", state: "open", result: null }, // открыт, не оценён → 0/3
+  { code: "C1", topic: "css", level: "orta", state: "hidden", result: null }, // не открыт — не считается
 ];
 
-describe("computeQuestionScore (живой режим)", () => {
-  test("веса oson 1 / o'rta 2 / qiyin 3, partial = 0.5, неоценённые вне знаменателя", () => {
+describe("computeQuestionScore (живой режим, решение Абубакира 27.11)", () => {
+  test("% от максимума ОТКРЫТЫХ вопросов: открыт без оценки = 0, неоткрытые не считаются", () => {
     const r = computeQuestionScore(items, { levelWeights: { oson: 1, orta: 2, qiyin: 3 }, partialCredit: 0.5, threshold: 80 });
-    expect(r.total).toBe(6);
+    expect(r.total).toBe(1 + 2 + 3 + 3); // C1 (hidden) вне знаменателя
     expect(r.earned).toBe(2);
-    expect(r.percentage).toBe(33.3);
+    expect(r.percentage).toBe(22.2);
     expect(r.passed).toBe(false);
+    expect(r.rated).toBe(3);
     expect(r.unrated).toBe(1);
+    expect(r.notOpened).toBe(1);
     expect(r.roadmapUz).toEqual(["JavaScript", "React"]);
-    expect(r.snapItems[0]).toMatchObject({ questionCode: "H1", weight: 1, earned: 1 });
+    expect(r.snapItems.map((i) => i.questionCode)).toEqual(["H1", "J1", "R1", "R2"]);
+    expect(r.snapItems[3]).toMatchObject({ questionCode: "R2", weight: 3, earned: 0, result: undefined });
   });
 
-  test("порог включительно; ничего не оценено → не прошёл", () => {
+  test("тот же кандидат по старому правилу прошёл бы: неоценённый открытый вопрос роняет % ниже 80", () => {
+    // 4 открыто, оценены 2 (oson pass, qiyin pass) = 4/4; открытые без оценки oson + o'rta = 0/3 → 4/7
+    const qs = [
+      { level: "oson", state: "closed", result: "pass", topic: "html" },
+      { level: "qiyin", state: "closed", result: "pass", topic: "css" },
+      { level: "oson", state: "closed", result: null, topic: "js" },
+      { level: "orta", state: "open", result: null, topic: "js" },
+      { level: "qiyin", state: "hidden", result: null, topic: "react" },
+    ];
+    const r = computeQuestionScore(qs, { threshold: 80 });
+    expect(r).toMatchObject({ earned: 4, total: 7, percentage: 57.1, passed: false, unrated: 2, notOpened: 1 });
+  });
+
+  test("оценён, но не открыт (обсудили устно) — оценка входит", () => {
+    const r = computeQuestionScore([{ level: "orta", state: "hidden", result: "pass", topic: "js" }]);
+    expect(r).toMatchObject({ earned: 2, total: 2, percentage: 100, notOpened: 0 });
+  });
+
+  test("порог включительно; ничего не открыто → не прошёл", () => {
     const pass = computeQuestionScore([{ level: "orta", result: "pass", topic: "js" }], { threshold: 100 });
     expect(pass.passed).toBe(true);
-    expect(computeQuestionScore([{ level: "orta", result: null }]).passed).toBe(false);
+    expect(computeQuestionScore([{ level: "orta", state: "hidden", result: null }]).passed).toBe(false);
+    expect(computeQuestionScore([{ level: "orta", state: "hidden", result: null }]).total).toBe(0);
   });
 });
 
 describe("вес по уровню по умолчанию 1/2/3 (поправка Абубакира 27.11)", () => {
   test("без levelWeights: oson 1, o'rta 2, qiyin 3", () => {
     const r = computeQuestionScore(items, { partialCredit: 0.5, threshold: 80 });
-    expect(r.total).toBe(6);
-    expect(r.snapItems.map((s) => s.weight)).toEqual([1, 2, 3]);
+    expect(r.total).toBe(9);
+    expect(r.snapItems.map((s) => s.weight)).toEqual([1, 2, 3, 3]);
   });
 
   test("с конфигом: 80% от максимума набора → прошёл (порог включительно)", () => {

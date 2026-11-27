@@ -37,8 +37,8 @@ const DEFAULTS = Object.freeze({
   languages: [...LANGUAGES],
   defaultLanguage: DEFAULT_LANGUAGE,
 
-  // §9.7 Домен кандидатского приложения — пока *.vercel.app (CANDIDATE_APP_URL).
-  candidateAppUrl: process.env.CANDIDATE_APP_URL || "",
+  // §9.7 Домен кандидатского приложения (утверждён 27.11). CANDIDATE_APP_URL перекрывает.
+  candidateAppUrl: process.env.CANDIDATE_APP_URL || "https://candidates-mars.vercel.app",
 
   // §9.8 Интернет в филиалах есть всегда — Sandpack (бандлер CodeSandbox) допустим.
   sandboxProvider: "sandpack",

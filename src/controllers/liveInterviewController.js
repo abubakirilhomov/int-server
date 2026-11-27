@@ -339,7 +339,7 @@ exports.finish = catchAsync(async (req, res) => {
   const result = computeQuestionScore(session.questions, {
     levelWeights: cfg.levelWeights, partialCredit: cfg.partialCredit, threshold: cfg.passThreshold,
   });
-  if (result.total === 0) throw new AppError("Нет ни одной оценки — оцените хотя бы один вопрос", 400);
+  if (result.total === 0) throw new AppError("Ни один вопрос не открыт и не оценён", 400);
 
   const now = new Date();
   await access.revokeAccess({ interview: interview._id }, "finished");

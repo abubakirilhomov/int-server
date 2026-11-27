@@ -58,11 +58,16 @@ function computeScore(items, topicsById, opts = {}) {
 }
 
 // Живой режим: оценка по вопросам банка (снимки InterviewSession.questions).
-// items: [{ code, promptShort, topic, level, result: pass|partial|fail|null, note }]
+// items: [{ code, promptShort, topic, level, state, result: pass|partial|fail|null, note }]
 // opts: { levelWeights, partialCredit, threshold }. Вес по уровню oson 1 /
-// o'rta 2 / qiyin 3 (config/candidateInterviews). Неоценённые (result=null)
-// не входят в знаменатель — интервьюер видит их число в `unrated`.
-// Roadmap — темы проваленных вопросов (без текста: банк конфиденциален,
+// o'rta 2 / qiyin 3 (config/candidateInterviews).
+//
+// Решение Абубакира 27.11: % для порога 80% считается от максимума всех
+// ОТКРЫТЫХ кандидату вопросов (state open/closed). Открыт, но не оценён = 0
+// (`unrated`); неоткрытые (hidden) не считаются (`notOpened`). Вопрос, который
+// интервьюер оценил, не открывая (обсудили устно), тоже входит — оценку не
+// теряем. Элемент без state считается открытым.
+// Roadmap — темы не зачтённых вопросов (без текста: банк конфиденциален,
 // а roadmap уходит кандидату в письме).
 const { TOPIC_LABELS } = require("../config/questionBankTopics");
 
@@ -74,12 +79,15 @@ function computeQuestionScore(items, opts = {}) {
   let earned = 0;
   let total = 0;
   let unrated = 0;
+  let notOpened = 0;
+  let rated = 0;
   const weakTopics = [];
   const snapItems = [];
 
   for (const it of items || []) {
-    if (!it.result) {
-      unrated += 1;
+    const opened = it.state ? it.state !== "hidden" : true;
+    if (!opened && !it.result) {
+      notOpened += 1;
       continue;
     }
     const w = Number(weights[it.level]) || 1;
@@ -87,6 +95,8 @@ function computeQuestionScore(items, opts = {}) {
     let e = 0;
     if (it.result === "pass") e = w;
     else if (it.result === "partial") e = w * partialCredit;
+    if (it.result) rated += 1;
+    else unrated += 1;
     earned += e;
     if (it.result !== "pass" && it.topic && !weakTopics.includes(it.topic)) {
       weakTopics.push(it.topic);
@@ -96,7 +106,7 @@ function computeQuestionScore(items, opts = {}) {
       label: it.promptShort || it.code,
       category: it.topic,
       weight: w,
-      result: it.result,
+      result: it.result || undefined, // открыт без оценки → 0 баллов
       earned: e,
       note: it.note || "",
     });
@@ -108,7 +118,9 @@ function computeQuestionScore(items, opts = {}) {
     total,
     percentage,
     passed: total > 0 && percentage >= threshold,
+    rated,
     unrated,
+    notOpened,
     roadmap: weakTopics.map((t) => TOPIC_LABELS[t]?.ru || t),
     roadmapUz: weakTopics.map((t) => TOPIC_LABELS[t]?.uz || t),
     snapItems,

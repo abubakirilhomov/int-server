@@ -179,7 +179,9 @@ describe("полный цикл живого собеседования", () => 
   test("до открытия — ожидание; ?rev → 304", async () => {
     const r = await api("GET", "/api/candidate/session", { token: ctoken });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ status: "lobby", current: null, questions: [] });
+    expect(r.body).toMatchObject({ status: "lobby", current: null, questions: [], me: { name: "Alpha Test", track: "frontend-react" } });
+    expect(r.text).not.toContain("+998"); // о человеке — только имя и направление
+    expect(r.text).not.toContain("t_alpha");
     expectNoSecrets(r.body, ["Sintetik"]);
     const again = await api("GET", `/api/candidate/session?rev=${r.body.rev}`, { token: ctoken });
     expect(again.status).toBe(304);
@@ -234,7 +236,8 @@ describe("полный цикл живого собеседования", () => 
   test("оценка и заметка → балл с весами по уровням; опрос интервьюера 304", async () => {
     const r = await api("PATCH", `/api/interviews/${ivA._id}/live/questions/H1`, { token: adminToken, body: { result: "pass", note: "yaxshi" } });
     expect(r.status).toBe(200);
-    expect(r.body.score).toMatchObject({ earned: 1, total: 1, percentage: 100, threshold: 80, rated: 1, unrated: 5 });
+    // открыт только H1 → 1/1; неоткрытые вне знаменателя
+    expect(r.body.score).toMatchObject({ earned: 1, total: 1, percentage: 100, threshold: 80, rated: 1, unrated: 0, notOpened: 5 });
     expect(r.body.score.setTotal).toBe(2 * 1 + 2 * 2 + 2 * 3);
     expect((await api("PATCH", `/api/interviews/${ivA._id}/live/questions/H1`, { token: adminToken, body: { result: "great" } })).status).toBe(400);
     const v = (await api("GET", `/api/interviews/${ivA._id}/live`, { token: adminToken })).body;
@@ -248,6 +251,8 @@ describe("полный цикл живого собеседования", () => 
   test("следующий вопрос «только обсудить»: прошлый закрыт и заморожен; сцена без исправления", async () => {
     const o = await api("POST", `/api/interviews/${ivA._id}/live/questions/C1/discuss`, { token: adminToken });
     expect(o.body.questions[0].state).toBe("closed");
+    // C1 (o'rta) открыт, но не оценён — считается как 0: 1 / (1 + 2)
+    expect(o.body.score).toMatchObject({ earned: 1, total: 3, percentage: 33.3, passed: false, unrated: 1, notOpened: 4 });
     expect(o.body.questions[0].answer.frozenAt).toBeTruthy();
     const late = await api("PUT", "/api/candidate/answers/1", { token: ctoken, body: { text: "kech", revision: 9 } });
     expect(late.status).toBe(409);
@@ -314,21 +319,24 @@ describe("полный цикл живого собеседования", () => 
 
   test("завершить → Interview completed, письмо без текста вопросов, доступ отозван", async () => {
     await api("PATCH", `/api/interviews/${ivA._id}/live/questions/C1`, { token: adminToken, body: { result: "partial" } });
+    // J1 открыт и не оценён — в итог как 0 (решение Абубакира 27.11)
+    await api("POST", `/api/interviews/${ivA._id}/live/questions/J1/open`, { token: adminToken });
     const f = await api("POST", `/api/interviews/${ivA._id}/live/finish`, { token: mentorToken });
     expect(f.status).toBe(403);
     const r = await api("POST", `/api/interviews/${ivA._id}/live/finish`, { token: adminToken });
     expect(r.status).toBe(200);
-    // H1 oson pass 1/1 + C1 o'rta partial 1/2 → 2/3 = 66.7% < 80
-    expect(r.body.score).toMatchObject({ earned: 2, total: 3, percentage: 66.7, passed: false });
+    // H1 oson pass 1/1 + C1 o'rta partial 1/2 + J1 o'rta открыт без оценки 0/2 → 2/5 = 40%
+    expect(r.body.score).toMatchObject({ earned: 2, total: 5, percentage: 40, passed: false, unrated: 1 });
+    expect(r.body.result.closedOpen).toEqual(["J1"]);
     expect(r.body.status).toBe("finished");
     expect(r.body.access.status).toBe("revoked");
     expect(r.body.letter.uz).toContain("CSS");
 
     const iv = await Interview.findById(ivA._id).lean();
-    expect(iv).toMatchObject({ status: "completed", mode: "live", percentage: 66.7, passed: false, scoreEarned: 2, scoreTotal: 3 });
-    expect(iv.items.map((i) => [i.questionCode, i.result, i.weight])).toEqual([["H1", "pass", 1], ["C1", "partial", 2]]);
+    expect(iv).toMatchObject({ status: "completed", mode: "live", percentage: 40, passed: false, scoreEarned: 2, scoreTotal: 5 });
+    expect(iv.items.map((i) => [i.questionCode, i.result, i.weight, i.earned])).toEqual([["H1", "pass", 1, 1], ["C1", "partial", 2, 1], ["J1", undefined, 2, 0]]);
     expect(iv.cooldownUntil).toBeTruthy();
-    expect(iv.roadmap).toEqual(["CSS"]);
+    expect(iv.roadmap).toEqual(["CSS", "JavaScript"]);
 
     // письмо — как для чек-листа (его забирает interns-agent): только темы
     const letter = await api("GET", `/api/interviews/${ivA._id}/letter`, { token: adminToken });
@@ -346,7 +354,7 @@ describe("полный цикл живого собеседования", () => 
 
     const hist = await api("GET", "/api/interviews/live/history?track=frontend-react", { token: adminToken });
     const rowA = hist.body.items.find((x) => String(x.interviewId) === String(ivA._id));
-    expect(rowA).toMatchObject({ candidate: "Alpha Test", percentage: 66.7, passed: false });
+    expect(rowA).toMatchObject({ candidate: "Alpha Test", percentage: 40, passed: false });
     expect(rowA.set.number).toBe(1);
 
     const list = await api("GET", "/api/interviews?status=completed", { token: adminToken });

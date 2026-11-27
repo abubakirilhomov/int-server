@@ -9,6 +9,10 @@
 // Чистые функции, без БД.
 
 const AUDIENCES = ["candidate", "interviewer"];
+// Библиотека, которую фронт вставляет в сцену перед html (инлайном, из своего
+// бандла — сеть сцене по-прежнему закрыта): react — React 18 UMD (window.React,
+// window.ReactDOM), vue — Vue 3 runtime без компилятора шаблонов (window.Vue, h()).
+const RUNTIMES = ["react", "vue"];
 const STEP_TYPES = ["wait", "click", "hover", "unhover", "scroll", "addClass", "removeClass"];
 const LIMITS = {
   html: 20000,
@@ -138,6 +142,11 @@ function normalizeDemo(input) {
     layers3d: input.layers3d === true,
     audience,
   };
+  const runtime = str(input.runtime).trim();
+  if (runtime) {
+    if (!RUNTIMES.includes(runtime)) errors.push(`runtime: ${RUNTIMES.join(" | ")} или пусто`);
+    else demo.runtime = runtime;
+  }
   if (errors.length) throw new DemoError(errors);
   return demo;
 }
@@ -162,4 +171,4 @@ function normalizeDemoFix(input) {
   return fix;
 }
 
-module.exports = { AUDIENCES, STEP_TYPES, LIMITS, SLIDER_RANGE, DemoError, normalizeDemo, normalizeDemoFix };
+module.exports = { AUDIENCES, RUNTIMES, STEP_TYPES, LIMITS, SLIDER_RANGE, DemoError, normalizeDemo, normalizeDemoFix };

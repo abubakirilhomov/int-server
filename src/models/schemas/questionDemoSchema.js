@@ -17,6 +17,7 @@ const questionDemoSchema = new mongoose.Schema(
     slider: { type: Boolean, default: false },
     layers3d: { type: Boolean, default: false },
     audience: { type: String, enum: ["candidate", "interviewer"], default: "candidate" },
+    runtime: { type: String, enum: ["react", "vue"], default: undefined },
   },
   { _id: false }
 );

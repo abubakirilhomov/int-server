@@ -52,6 +52,13 @@ describe("normalizeDemo", () => {
     expect(err.message).toMatch(/неизвестный тип "eval"/);
   });
 
+  test("runtime: react | vue, пусто — поля нет, чужое — ошибка", () => {
+    expect(normalizeDemo(demo({ runtime: "react" })).runtime).toBe("react");
+    expect(normalizeDemo(demo({ runtime: "vue" })).runtime).toBe("vue");
+    expect(normalizeDemo(demo({ runtime: "" }))).not.toHaveProperty("runtime");
+    expect(() => normalizeDemo(demo({ runtime: "https://cdn.example/react.js" }))).toThrow(/runtime: react \| vue/);
+  });
+
   test("лимиты размера", () => {
     expect(() => normalizeDemo({ html: "x".repeat(20001) })).toThrow(/html длиннее/);
     expect(() => normalizeDemo({ html: "x", steps: Array(41).fill({ type: "wait" }) })).toThrow(/больше 40/);
@@ -73,6 +80,12 @@ describe("кандидатский вид", () => {
     expect(json).not.toContain(FIX_MARK);
     expect(json).not.toContain("Tuzatilgan");
     expect(json).not.toMatch(/audience|demoFix|fix/i);
+  });
+
+  test("runtime сцены доходит до кандидата", () => {
+    const rq = { ...q, demo: normalizeDemo(demo({ runtime: "vue" })) };
+    expect(toCandidateQuestion(rq, 1, "uz").demo.runtime).toBe("vue");
+    expect(toCandidateQuestion(q, 1, "uz").demo).not.toHaveProperty("runtime");
   });
 
   test("подпись на выбранном языке, без перевода — узбекская", () => {
@@ -159,5 +172,15 @@ describe("в БД", () => {
   test("снимок сессии хранит сцену, а поля demoFix в нём нет", async () => {
     expect(InterviewSession.schema.path("questions").schema.path("demo")).toBeDefined();
     expect(InterviewSession.schema.path("questions").schema.path("demoFix")).toBeUndefined();
+    expect(InterviewSession.schema.path("questions").schema.path("demo").schema.path("runtime")).toBeDefined();
+  });
+
+  test("runtime сохраняется в банке, повторная запись — без изменений", async () => {
+    const entry = { code: "C98", demo: demo({ runtime: "react" }) };
+    await applyDemos([entry]);
+    expect((await BankQuestion.findOne({ code: "C98" }).lean()).demo.runtime).toBe("react");
+    expect((await applyDemos([entry])).unchanged).toBe(1);
+    const bad = await applyDemos([{ code: "C98", demo: demo({ runtime: "angular" }) }]);
+    expect(bad.invalid).toHaveLength(1);
   });
 });

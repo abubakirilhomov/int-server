@@ -15,7 +15,7 @@ const { normalizeLanguage, localized, localizedOptions } = require("../utils/que
 const { editorFor } = require("../config/questionBankTopics");
 const { testNames } = require("../utils/questionBank/tests");
 
-const DEMO_FIELDS = ["html", "css", "height", "width", "slider", "layers3d"];
+const DEMO_FIELDS = ["html", "css", "height", "width", "slider", "layers3d", "runtime"];
 const STEP_FIELDS = ["type", "ms", "target", "to", "className"];
 
 function plainSteps(steps) {

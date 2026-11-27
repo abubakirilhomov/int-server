@@ -7,6 +7,7 @@ const marsIdService = require("../services/marsIdService");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const { setRefreshCookie } = require("../utils/refreshCookie");
+const { keyFor } = require("../utils/tokenKeys");
 
 const APP_KEYS = ["mentors", "interns", "admin"];
 const STATE_TTL_SEC = 10 * 60;
@@ -148,8 +149,8 @@ exports.start = catchAsync(async (req, res) => {
   const nonce = crypto.randomBytes(16).toString("hex");
   // Sign state: opaque JWT carrying app + nonce so callback can verify without server session
   const state = jwt.sign(
-    { app, nonce },
-    process.env.JWT_SECRET,
+    { typ: "marsid-state", app, nonce },
+    keyFor("marsidState"),
     { expiresIn: STATE_TTL_SEC }
   );
 
@@ -166,7 +167,8 @@ exports.callback = catchAsync(async (req, res) => {
   // Decode state first so we know where to redirect errors back to
   let stateClaims = null;
   try {
-    stateClaims = jwt.verify(String(state || ""), process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    stateClaims = jwt.verify(String(state || ""), keyFor("marsidState"), { algorithms: ["HS256"] });
+    if (stateClaims.typ !== "marsid-state") throw new Error("wrong typ");
   } catch {
     throw new AppError("Невалидный state — повторите вход", 400);
   }
@@ -234,6 +236,7 @@ exports.callback = catchAsync(async (req, res) => {
   // No linked record — issue linkageToken so frontend can collect creds
   const linkageToken = jwt.sign(
     {
+      typ: "marsid-linkage",
       kind,
       app: stateClaims.app,
       sub: userinfo.sub,
@@ -242,7 +245,7 @@ exports.callback = catchAsync(async (req, res) => {
       email: userinfo.email || "",
       role: userinfo.role || "",
     },
-    process.env.JWT_SECRET,
+    keyFor("marsidLinkage"),
     { expiresIn: LINKAGE_TTL_SEC }
   );
   return res.redirect(
@@ -265,7 +268,8 @@ exports.link = catchAsync(async (req, res) => {
 
   let claims;
   try {
-    claims = jwt.verify(linkageToken, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    claims = jwt.verify(linkageToken, keyFor("marsidLinkage"), { algorithms: ["HS256"] });
+    if (claims.typ !== "marsid-linkage") throw new Error("wrong typ");
   } catch {
     throw new AppError("Linkage token истёк или невалиден — повторите вход", 401);
   }

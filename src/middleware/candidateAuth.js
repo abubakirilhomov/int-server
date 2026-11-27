@@ -5,7 +5,9 @@
 // («Завершить», сброс пароля) и истечение окна действуют мгновенно.
 //
 // Ответы об отказе: 401 {code: invalid | expired | finished | revoked}, 403 {code: not_yet, validFrom}.
+const mongoose = require("mongoose");
 const CandidateAccess = require("../models/candidateAccessModel");
+const InterviewSession = require("../models/interviewSessionModel");
 const { verifyCandidateToken } = require("../services/candidateAccess");
 
 const SEEN_THROTTLE_MS = 5000;
@@ -42,6 +44,13 @@ async function candidateAuth(req, res, next) {
   }
   if (claims.typ !== "candidate" || !claims.sub) return deny(res, 401, "invalid", "Неверный токен");
 
+  // Опрос GET /session: голова сессии (rev, язык) читается одновременно с
+  // доступом — пустой опрос стоит один поход в БД, а не два. Используется,
+  // только если доступ прошёл проверку и iid совпал с его собеседованием.
+  const headP = req.method === "GET" && req.path === "/session" && mongoose.isValidObjectId(claims.iid)
+    ? InterviewSession.findOne({ interview: claims.iid }).select("_id candidateRev language").lean().catch(() => undefined)
+    : undefined;
+
   let access;
   try {
     access = await CandidateAccess.findById(claims.sub);
@@ -63,7 +72,7 @@ async function candidateAuth(req, res, next) {
     // Не ждём: опрос кандидата не должен платить за эту запись лишним походом в БД.
     CandidateAccess.updateOne({ _id: access._id }, { $set: { lastSeenAt: now } }).catch(() => {});
   }
-  req.candidate = { access };
+  req.candidate = { access, headP: headP && String(access.interview) === claims.iid ? headP : undefined };
   next();
 }
 

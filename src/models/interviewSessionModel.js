@@ -1,9 +1,10 @@
 const mongoose = require("mongoose");
+const { questionDemoSchema } = require("./schemas/questionDemoSchema");
 
 // Живая сессия собеседования (Interview.mode = "live"), 1:1 с Interview.
 // questions[] — снимки вопросов на момент старта: правка банка не меняет
 // прошедшие собеседования. expectedAnswer и отметка верного варианта в снимок
-// НЕ копируются — интервьюер получает их из банка по code. Тексты — на обоих
+// НЕ копируются — интервьюер получает их из банка по code. Так же demoFix. Тексты — на обоих
 // языках: кандидат может сменить язык посреди собеседования.
 const QUESTION_STATES = ["hidden", "open", "closed"];
 const RESULTS = ["pass", "partial", "fail"];
@@ -25,6 +26,8 @@ const sessionQuestionSchema = new mongoose.Schema(
       template: { type: String, default: undefined },
       files: { type: Map, of: String, default: undefined },
     },
+    // Живая сцена — БЕЗ исправления (demoFix в снимок не копируется никогда).
+    demo: { type: questionDemoSchema, default: undefined },
     state: { type: String, enum: QUESTION_STATES, default: "hidden" },
     discussOnly: { type: Boolean, default: false },
     openedAt: Date,

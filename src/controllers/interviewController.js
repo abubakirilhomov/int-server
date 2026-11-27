@@ -10,6 +10,9 @@ const InterviewTopic = require("../models/interviewTopicModel");
 const Setting = require("../models/settingModel");
 const { computeScore } = require("../utils/scoreInterview");
 const { buildLetters } = require("../utils/roadmapLetter");
+const InterviewSession = require("../models/interviewSessionModel");
+const { TOPIC_LABELS } = require("../config/questionBankTopics");
+const { getCandidateInterviewConfig } = require("../config/candidateInterviews");
 
 const isValidObjectId = (id) => mongoose.isValidObjectId(id);
 
@@ -149,6 +152,14 @@ exports.schedule = catchAsync(async (req, res, next) => {
   res.status(201).json(decorate(full));
 });
 
+// Состояние живой сессии для карточки: «Начать» / «Продолжить» / завершено.
+async function liveStatusByInterview(ids) {
+  if (!ids.length) return new Map();
+  const rows = await InterviewSession.find({ interview: { $in: ids } })
+    .select("interview status startedAt finishedAt").lean();
+  return new Map(rows.map((r) => [String(r.interview), { status: r.status, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null }]));
+}
+
 // ─── ADMIN: список (доска Сегодня/Скоро) ──────────────────────────────────────
 exports.list = catchAsync(async (req, res) => {
   const { from, to, status, track, q } = req.query;
@@ -179,7 +190,11 @@ exports.list = catchAsync(async (req, res) => {
     });
   }
 
-  res.json({ items: interviews.map(decorate), total: interviews.length });
+  const live = await liveStatusByInterview(interviews.map((iv) => iv._id));
+  res.json({
+    items: interviews.map((iv) => ({ ...decorate(iv), live: live.get(String(iv._id)) || null })),
+    total: interviews.length,
+  });
 });
 
 // ─── ADMIN: одно интервью ─────────────────────────────────────────────────────
@@ -187,7 +202,8 @@ exports.getOne = catchAsync(async (req, res, next) => {
   if (!isValidObjectId(req.params.id)) return next(new AppError("Некорректный ID", 400));
   const interview = await populateApplication(Interview.findById(req.params.id));
   if (!interview) return next(new AppError("Собеседование не найдено", 404));
-  res.json(decorate(interview));
+  const live = await liveStatusByInterview([interview._id]);
+  res.json({ ...decorate(interview), live: live.get(String(interview._id)) || null });
 });
 
 // ─── ADMIN: статус (no_show / canceled / completed) ───────────────────────────
@@ -210,6 +226,11 @@ exports.updateStatus = catchAsync(async (req, res, next) => {
   // Синхронизируем статус заявки для no_show.
   if (status === "no_show") {
     await Application.findByIdAndUpdate(interview.application, { status: "no_show" });
+  }
+
+  // Отмена / неявка — разовый доступ кандидата гаснет сразу.
+  if (status === "no_show" || status === "canceled") {
+    await require("./liveInterviewController").abortForInterview(interview._id, status);
   }
 
   const full = await populateApplication(Interview.findById(interview._id));
@@ -293,6 +314,9 @@ exports.score = catchAsync(async (req, res, next) => {
   app.cooldownUntil = result.passed ? null : interview.cooldownUntil;
   await app.save();
 
+  // Оценили по чек-листу посреди живой сессии — разовый доступ кандидата гаснет.
+  await require("./liveInterviewController").abortForInterview(interview._id, "finished");
+
   const letter = buildLetters({
     candidateName: `${app.firstName || ""} ${app.lastName || ""}`.trim(),
     earned: result.earned,
@@ -324,12 +348,23 @@ exports.letter = catchAsync(async (req, res, next) => {
 
   const app = interview.application || {};
   const settingDoc = await Setting.findOne({ key: "interviewSettings" }).lean();
-  const threshold = Number(settingDoc?.value?.passThreshold ?? 80);
+  let threshold = Number(settingDoc?.value?.passThreshold ?? 80);
 
   // UZ roadmap из снапшота тем (label), RU — из сохранённого interview.roadmap (labelRu).
-  const roadmapUz = (interview.items || [])
-    .filter((i) => i.result !== "pass")
-    .map((i) => i.label || i.labelRu);
+  // Живой режим: label = короткий текст вопроса банка (конфиденциален) — в письмо
+  // идут только названия тем проваленных вопросов.
+  let roadmapUz;
+  if (interview.mode === "live") {
+    threshold = (await getCandidateInterviewConfig()).passThreshold;
+    roadmapUz = [...new Set((interview.items || [])
+      .filter((i) => i.result !== "pass" && i.category)
+      .map((i) => i.category))]
+      .map((t) => TOPIC_LABELS[t]?.uz || t);
+  } else {
+    roadmapUz = (interview.items || [])
+      .filter((i) => i.result !== "pass")
+      .map((i) => i.label || i.labelRu);
+  }
 
   const letter = buildLetters({
     candidateName: `${app.firstName || ""} ${app.lastName || ""}`.trim(),

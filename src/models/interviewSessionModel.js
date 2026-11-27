@@ -64,11 +64,15 @@ const interviewSessionSchema = new mongoose.Schema(
     },
     // Растёт при любом изменении — на нём держится опрос (?rev=N → 304).
     rev: { type: Number, default: 0 },
+    // Растёт только при изменениях, видимых кандидату (открыт/закрыт вопрос,
+    // язык, его отправка, завершение) — черновики и оценки его опрос не будят.
+    candidateRev: { type: Number, default: 0 },
     currentIndex: { type: Number, default: -1 },
     questions: { type: [sessionQuestionSchema], default: [] },
     signals: { type: [signalSchema], default: [] },
     startedAt: Date,
     finishedAt: Date,
+    finishedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },
   },
   { timestamps: true }
 );

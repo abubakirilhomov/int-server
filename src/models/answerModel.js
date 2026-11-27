@@ -9,11 +9,13 @@ const answerSchema = new mongoose.Schema(
   {
     session: { type: mongoose.Schema.Types.ObjectId, ref: "InterviewSession", required: true },
     questionCode: { type: String, required: true },
-    kind: { type: String, enum: ["text", "code", "sandbox"], default: "text" },
+    kind: { type: String, enum: ["text", "code", "sandbox", "choice"], default: "text" },
     text: { type: String, default: "" },
     files: { type: Map, of: String, default: undefined },
     revision: { type: Number, default: 0 },
     draftUpdatedAt: Date,
+    // Кандидат нажал «Отправить» (последний раз). Черновик можно менять, пока вопрос открыт.
+    submittedAt: { type: Date, default: null },
     frozenAt: { type: Date, default: null }, // вопрос закрыт → запись запрещена (409)
   },
   { timestamps: true }

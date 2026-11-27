@@ -18,6 +18,8 @@ const candidateAccessSchema = new mongoose.Schema(
     // Растёт при отзыве/сбросе пароля — гасит все выданные токены сразу.
     tokenVersion: { type: Number, default: 0 },
     lastLoginAt: { type: Date, default: null },
+    // Последний запрос кандидата (пишется не чаще раза в 5 с) — «не на связи N с» у интервьюера.
+    lastSeenAt: { type: Date, default: null },
     loginCount: { type: Number, default: 0 },
     failedLogins: { type: Number, default: 0 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Mentor", default: null },

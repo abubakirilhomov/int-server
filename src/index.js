@@ -70,10 +70,15 @@ const defaultOrigins = [
   "https://internup-zeta.vercel.app",
   "https://internup-mars.uz",
   "https://www.internup-mars.uz",
+  "https://candidates-mars.vercel.app",
 ];
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
+// Приложение кандидата (живые собеседования) — его домен пускаем всегда.
+if (process.env.CANDIDATE_APP_URL) {
+  try { allowedOrigins.push(new URL(process.env.CANDIDATE_APP_URL).origin); } catch { /* невалидный URL — пропуск */ }
+}
 
 const localhostRe = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
@@ -90,6 +95,9 @@ app.use(
 );
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
+// Ответы кандидата (код) не влезают в 10 КБ: свой парсер до общего — общий
+// пропускает уже разобранное тело.
+app.use("/api/candidate/answers", express.json({ limit: "200kb" }));
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 
@@ -102,6 +110,11 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Слишком много запросов. Попробуйте через минуту." },
+  // Опрос живого собеседования (раз в 2 с у кандидата и интервьюера, часто
+  // из одного офисного IP) — у кандидата свой лимит в candidateRoutes.
+  skip: (req) =>
+    req.path.startsWith("/candidate/") ||
+    (req.method === "GET" && /^\/interviews\/[^/]+\/live$/.test(req.path)),
 });
 
 // Auth: 20 attempts per 15 min per IP
@@ -143,6 +156,7 @@ app.use("/api/head-intern", require("./routes/headInternRoutes"));
 app.use("/api/monthly-interviews", require("./routes/monthlyInterviewRoutes"));
 app.use("/api/monthly-interview-sessions", require("./routes/monthlyInterviewSessionRoutes"));
 app.use("/api/question-bank", require("./routes/questionBankRoutes"));
+app.use("/api/candidate", require("./routes/candidateRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

@@ -65,23 +65,48 @@ function toCandidateQuestion(q, position, lang) {
   return out;
 }
 
-// Сессия → вид для кандидата: только открытые и закрытые вопросы.
-// lang — явный выбор в запросе; по умолчанию язык сессии.
-function toCandidateSession(session, lang) {
-  if (!session) return null;
-  const language = normalizeLanguage(lang || session.language);
-  const visible = (session.questions || [])
+// Показанные кандидату вопросы в порядке открытия: position = индекс + 1.
+// Тот же порядок использует PUT /candidate/answers/:position.
+function visibleQuestions(session) {
+  return (session?.questions || [])
     .filter((q) => q.state === "open" || q.state === "closed")
     .sort((a, b) => (a.openedAt ? +new Date(a.openedAt) : 0) - (b.openedAt ? +new Date(b.openedAt) : 0));
-  const questions = visible.map((q, i) => toCandidateQuestion(q, i + 1, language));
+}
+
+// Собственный ответ кандидата — только текст и отметки времени.
+function toCandidateAnswer(a) {
+  if (!a) return null;
+  return {
+    text: String(a.text || ""),
+    revision: Number(a.revision) || 0,
+    savedAt: a.draftUpdatedAt || null,
+    submittedAt: a.submittedAt || null,
+    frozen: Boolean(a.frozenAt),
+  };
+}
+
+// Сессия → вид для кандидата: только открытые и закрытые вопросы.
+// lang — явный выбор в запросе; по умолчанию язык сессии.
+// answersByCode — его ответы (Map или объект code → Answer); код наружу не уходит.
+function toCandidateSession(session, lang, answersByCode) {
+  if (!session) return null;
+  const language = normalizeLanguage(lang || session.language);
+  const visible = visibleQuestions(session);
+  const getAnswer = (code) =>
+    answersByCode && typeof answersByCode.get === "function" ? answersByCode.get(code) : answersByCode?.[code];
+  const questions = visible.map((q, i) => {
+    const out = toCandidateQuestion(q, i + 1, language);
+    if (answersByCode) out.answer = toCandidateAnswer(getAnswer(q.code));
+    return out;
+  });
   const currentIdx = visible.findIndex((q) => q.state === "open");
   return {
     status: session.status === "finished" || session.status === "aborted" ? "finished" : session.status,
-    rev: Number(session.rev) || 0,
+    rev: Number(session.candidateRev ?? session.rev) || 0,
     language,
     current: currentIdx >= 0 ? questions[currentIdx].position : null,
     questions,
   };
 }
 
-module.exports = { toCandidateQuestion, toCandidateSession, toCandidateDemo };
+module.exports = { toCandidateQuestion, toCandidateSession, toCandidateDemo, visibleQuestions };

@@ -60,7 +60,8 @@ async function candidateAuth(req, res, next) {
 
   if (!access.lastSeenAt || now - access.lastSeenAt > SEEN_THROTTLE_MS) {
     access.lastSeenAt = now;
-    await CandidateAccess.updateOne({ _id: access._id }, { $set: { lastSeenAt: now } }).catch(() => {});
+    // Не ждём: опрос кандидата не должен платить за эту запись лишним походом в БД.
+    CandidateAccess.updateOne({ _id: access._id }, { $set: { lastSeenAt: now } }).catch(() => {});
   }
   req.candidate = { access };
   next();

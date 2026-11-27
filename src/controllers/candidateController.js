@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const CandidateAccess = require("../models/candidateAccessModel");
 const InterviewSession = require("../models/interviewSessionModel");
 const Answer = require("../models/answerModel");
+const Application = require("../models/applicationModel");
 const catchAsync = require("../utils/catchAsync");
 const { accessDenial } = require("../middleware/candidateAuth");
 const { toCandidateSession, visibleQuestions } = require("../serializers/candidateView");
@@ -70,16 +71,27 @@ async function sessionOf(req, res) {
 }
 
 // ─── GET /session?rev=N&lang=uz|ru → 304, если для кандидата ничего не изменилось
+// Сначала лёгкий запрос (rev и язык): пустой опрос не тянет из БД снимки вопросов.
 exports.getSession = catchAsync(async (req, res) => {
-  const session = await sessionOf(req, res);
-  if (!session) return;
   const lang = req.query.lang ? normalizeLanguage(req.query.lang) : null;
-  if (req.query.rev !== undefined && Number(req.query.rev) === session.candidateRev && (!lang || lang === session.language)) {
-    return res.status(304).end();
+  const interview = req.candidate.access.interview;
+  if (req.query.rev !== undefined) {
+    const head = await InterviewSession.findOne({ interview }).select("candidateRev language").lean();
+    if (!head) return fail(res, 404, "no_session", "Собеседование ещё не начато");
+    if (Number(req.query.rev) === head.candidateRev && (!lang || lang === head.language)) {
+      return res.status(304).end();
+    }
   }
+  const [session, app] = await Promise.all([
+    InterviewSession.findOne({ interview }),
+    Application.findById(req.candidate.access.application).select("firstName lastName").lean(),
+  ]);
+  if (!session) return fail(res, 404, "no_session", "Собеседование ещё не начато");
   const codes = visibleQuestions(session).map((q) => q.code);
   const answers = await Answer.find({ session: session._id, questionCode: { $in: codes } }).lean();
-  res.json(toCandidateSession(session, lang, new Map(answers.map((a) => [a.questionCode, a]))));
+  // Своё имя и направление — для строки на экране ожидания (больше о человеке ничего).
+  const me = { name: app ? `${app.firstName || ""} ${app.lastName || ""}`.trim() : "", track: session.track };
+  res.json({ ...toCandidateSession(session, lang, new Map(answers.map((a) => [a.questionCode, a]))), me });
 });
 
 // ─── PUT /answers/:position { text, revision, submit? } ────────────────────

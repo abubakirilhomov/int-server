@@ -76,9 +76,9 @@ const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
 // Приложение кандидата (живые собеседования) — его домен пускаем всегда.
-if (process.env.CANDIDATE_APP_URL) {
-  try { allowedOrigins.push(new URL(process.env.CANDIDATE_APP_URL).origin); } catch { /* невалидный URL — пропуск */ }
-}
+try {
+  allowedOrigins.push(new URL(process.env.CANDIDATE_APP_URL || "https://candidates-mars.vercel.app").origin);
+} catch { /* невалидный URL — пропуск */ }
 
 const localhostRe = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 

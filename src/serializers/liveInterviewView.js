@@ -17,8 +17,9 @@ function isOnline(access, now = new Date()) {
   return Boolean(access?.lastSeenAt && now - new Date(access.lastSeenAt) <= ONLINE_MS);
 }
 
-// Балл: неоценённые вне знаменателя (computeQuestionScore) + справочно доля
-// от максимума всего набора, чтобы видеть, сколько ещё можно набрать.
+// Балл — тот же расчёт, что пишет «Завершить» (computeQuestionScore): от
+// максимума открытых кандидату вопросов, открытый без оценки = 0. setTotal и
+// percentOfSet — справочно, от максимума всего набора.
 function sessionScore(questions, cfg) {
   const weights = cfg.levelWeights;
   const r = computeQuestionScore(questions, {
@@ -35,9 +36,11 @@ function sessionScore(questions, cfg) {
     threshold: cfg.passThreshold,
     partialCredit: cfg.partialCredit,
     levelWeights: weights,
-    rated: (questions || []).length - r.unrated,
-    unrated: r.unrated,
-    unratedShown: (questions || []).filter((q) => !q.result && q.state !== "hidden").length,
+    counted: r.rated + r.unrated, // вопросов в знаменателе
+    rated: r.rated,
+    unrated: r.unrated, // открыты без оценки — считаются как 0
+    unratedShown: r.unrated, // совместимость с экраном 2b
+    notOpened: r.notOpened,
     setTotal,
     percentOfSet: setTotal > 0 ? Math.round((r.earned / setTotal) * 1000) / 10 : 0,
   };

@@ -53,6 +53,9 @@ async function applyTrackRules(track, rules, { dryRun }) {
 
 async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) {
   const isPython = parsed.format === "python";
+  // Банк Node: вопросы неактивны («не включён» — notCovered), пока владелец не
+  // одобрит банк и квоту; общее правило (уровни, квоты JS) не перезаписывается.
+  const isNode = parsed.format === "node";
   const questions = await upsertAll(
     BankQuestion,
     parsed.questions,
@@ -61,8 +64,9 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
       code: q.code, topic: q.topic, tracks: q.tracks, level: q.level, order: q.order,
       isPractical: q.isPractical, isMiniTask: q.isMiniTask, prompt: q.prompt, promptShort: q.promptShort,
       expectedAnswer: q.expectedAnswer, answerKind: q.answerKind, conflictGroup: q.conflictGroup,
-      isActive: isPython ? q.isActive : true, source: sourceLabel, contentHash: q.contentHash,
+      isActive: isPython ? q.isActive : !isNode, source: sourceLabel, contentHash: q.contentHash,
       ...(isPython ? { editor: q.editor || undefined, subtopic: q.subtopic || null, notCovered: Boolean(q.notCovered) } : {}),
+      ...(isNode ? { notCovered: true } : {}),
     }),
     { dryRun }
   );
@@ -73,7 +77,7 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
   let rules = null;
   if (parsed.rules && isPython) {
     rules = await applyTrackRules(parsed.track || BP, parsed.rules, { dryRun });
-  } else if (!dryRun && parsed.rules) {
+  } else if (!dryRun && parsed.rules && !isNode) {
     const { levels, minPractical, quotas, conflictGroups } = parsed.rules;
     await Setting.updateOne(
       { key: "questionBankRules" },

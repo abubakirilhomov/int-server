@@ -8,8 +8,9 @@ const IMPORT_BY = "translation-import";
 const SELECT = "+expectedAnswer +expectedAnswerRu +options.correct";
 
 // Узбекский оригинал для перевода: код, хеш оригинала, тексты.
-async function exportSource({ codes, onlyMissing = false } = {}) {
-  const filter = { isActive: true };
+// includeInactive — и неактивные (банк Node до включения, «ещё не пройдено»).
+async function exportSource({ codes, onlyMissing = false, includeInactive = false } = {}) {
+  const filter = includeInactive ? {} : { isActive: true };
   if (codes?.length) filter.code = { $in: codes };
   const docs = await BankQuestion.find(filter).select(SELECT).sort({ topic: 1, order: 1 }).lean();
   return docs

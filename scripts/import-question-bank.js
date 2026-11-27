@@ -2,6 +2,8 @@
 /**
  * Импорт банка вопросов собеседований из .docx в БД.
  * Формат определяется сам: JS-банк (H1, J22…) или Python-банк (M3-05…).
+ * Node (только N-вопросы, без наборов): все вопросы неактивные (notCovered, «не включён»),
+ * общее правило набора не трогается — включение и квота отдельно, после решения владельца.
  * Python: вопросы раздела 5 (ещё не пройденные модули) — неактивные (notCovered),
  * правило набора — в Setting questionBankRules.value.tracks["backend-python"].
  *
@@ -49,7 +51,8 @@ async function main() {
     ? await BankQuestion.find({ code: { $in: parsed.rules.extras.codes } }).select("code topic tracks level isActive").lean()
     : null;
   const { errors, warnings } = python ? validatePythonBank(parsed, { jsBank }) : validateBank(parsed);
-  console.log(`Формат: ${python ? "Python-банк (модули M3…)" : "JS-банк"}`);
+  const fmtLabel = python ? "Python-банк (модули M3…)" : parsed.format === "node" ? "Node-банк (N…) — импорт НЕАКТИВНЫМ, правило набора не трогается" : "JS-банк";
+  console.log(`Формат: ${fmtLabel}`);
   const byTopic = {};
   parsed.questions.forEach((q) => { byTopic[q.topic] = (byTopic[q.topic] || 0) + 1; });
   const setsByTrack = {};

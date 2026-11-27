@@ -217,10 +217,10 @@ describe("добавление вопроса", () => {
     expect((await admin("POST", "/api/question-bank/questions", { code: "J28", level: "orta" })).status).toBe(400);
   });
 
-  test("backend-вопрос: префикс N → тема node, трек backend-nodejs", async () => {
+  test("Node-вопрос: префикс N → тема node, треки JS · React, JS · Vue (+ архивный backend)", async () => {
     const r = await admin("POST", "/api/question-bank/questions", { code: "N1", level: "oson", prompt: "Node savol" });
     expect(r.status).toBe(201);
-    expect(r.body.question).toMatchObject({ topic: "node", tracks: ["backend-nodejs"] });
+    expect(r.body.question).toMatchObject({ topic: "node", tracks: ["frontend-react", "frontend-vue", "backend-nodejs"] });
   });
 });
 

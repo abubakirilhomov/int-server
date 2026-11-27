@@ -2,10 +2,11 @@
 /**
  * Русский перевод банка вопросов собеседований.
  *
- *   node scripts/question-translations.js export <out.json> [--missing] [--codes=H1,J2]
+ *   node scripts/question-translations.js export <out.json> [--missing] [--codes=H1,J2] [--inactive]
  *   node scripts/question-translations.js import <in.json>  [--dry-run] [--force]
  *
  * export — узбекский оригинал (код, sourceHash, тексты) для перевода.
+ *          --inactive — и неактивные вопросы (банк Node до включения, «ещё не пройдено»).
  * import — файл [{ code, sourceHash, promptRu, promptShortRu, expectedAnswerRu, options:[{key,textRu}] }]
  *          (или { translations: [...] }). Идемпотентен; uz не трогает; перевод,
  *          сделанный с устаревшего uz-текста (sourceHash не совпал), не пишется.
@@ -40,7 +41,7 @@ async function main() {
   await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
   try {
     if (cmd === "export") {
-      const items = await exportSource({ codes, onlyMissing: flags.includes("--missing") });
+      const items = await exportSource({ codes, onlyMissing: flags.includes("--missing"), includeInactive: flags.includes("--inactive") });
       fs.writeFileSync(file, JSON.stringify(items, null, 2), { mode: 0o600 });
       console.log(`Выгружено вопросов: ${items.length} → ${file}`);
     } else {
@@ -57,6 +58,7 @@ async function main() {
       if (r.skippedEdited.length) console.log(`  ⚠ правил админ (--force): ${r.skippedEdited.join(", ")}`);
     }
     console.log(`Покрытие переводом: ${JSON.stringify(await translationStats())}`);
+    if (flags.includes("--inactive")) console.log(`  с неактивными: ${JSON.stringify(await translationStats({}))}`);
   } finally {
     await mongoose.disconnect();
   }

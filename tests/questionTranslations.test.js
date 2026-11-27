@@ -134,7 +134,7 @@ describe("backend-трек", () => {
     expect(r.questions.created).toBe(4);
     expect(r.sets.created).toBe(1);
     const n1 = await BankQuestion.findOne({ code: "N1" }).lean();
-    expect(n1).toMatchObject({ topic: "node", tracks: ["backend-nodejs"] });
+    expect(n1).toMatchObject({ topic: "node", tracks: ["frontend-react", "frontend-vue", "backend-nodejs"] });
     expect(await resolveInterviewMode("backend-nodejs")).toBe("live");
 
     await InterviewSet.updateMany({ track: "backend-nodejs" }, { $set: { isActive: false } });

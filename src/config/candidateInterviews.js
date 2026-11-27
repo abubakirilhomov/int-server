@@ -13,9 +13,11 @@ const DEFAULTS = Object.freeze({
   recordSignals: true,
   blockPaste: false,
 
-  // §9.2 Все вопросы весят одинаково, порог прохождения 80%.
-  // Доля за «частично» — null → из текущего процесса (interviewSettings, 0.5).
-  levelWeights: { oson: 1, orta: 1, qiyin: 1 },
+  // §9.2 «Все равны» = каждое собеседование одинаково по сложности, а не
+  // равный вес вопросов (поправка Абубакира 27.11). Вес по уровню 1/2/3;
+  // состав набора по уровням обязателен (utils/questionBank/setLevels).
+  // Порог 80% от максимума набора. «Частично» — из interviewSettings (0.5).
+  levelWeights: { oson: 1, orta: 2, qiyin: 3 },
   passThreshold: 80,
   partialCredit: null,
 

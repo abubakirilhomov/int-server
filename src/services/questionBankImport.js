@@ -44,6 +44,16 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
     }),
     { dryRun }
   );
+  // Правила составления наборов (квоты/уровни/conflict-группы) — только коды и
+  // числа, без текста вопросов. Пишутся ДО наборов: по ним InterviewSet
+  // проверяет состав по уровням при создании.
+  if (!dryRun && parsed.rules) {
+    await Setting.updateOne(
+      { key: "questionBankRules" },
+      { $set: { value: parsed.rules } },
+      { upsert: true }
+    );
+  }
   const sets = await upsertAll(
     InterviewSet,
     parsed.sets,
@@ -54,15 +64,6 @@ async function applyBank(parsed, { dryRun = false, sourceLabel = SOURCE } = {}) 
     }),
     { dryRun }
   );
-  // Правила составления наборов (квоты/уровни/conflict-группы) — только коды и
-  // числа, без текста вопросов. Нужны генератору наборов (этап 3).
-  if (!dryRun && parsed.rules) {
-    await Setting.updateOne(
-      { key: "questionBankRules" },
-      { $set: { value: parsed.rules } },
-      { upsert: true }
-    );
-  }
   return { questions, sets };
 }
 

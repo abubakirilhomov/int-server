@@ -2,6 +2,7 @@
 // Формат файла: «mars-intern-savollar-bank» (27.11.2026). Само содержимое
 // банка в репозитории не хранится — тесты используют синтетические блоки.
 const crypto = require("crypto");
+const { checkSetLevels, fmt } = require("./setLevels");
 const { PREFIX, CODE_LANG, PREFIX_CHARS, CODE_PATTERN, APOS, topicByName } = require("../../config/questionBankTopics");
 
 const LEVEL_RE = new RegExp(`^(oson|o${APOS}rta|qiyin)$`, "i");
@@ -249,14 +250,9 @@ function validateBank(parsed) {
     const wrongTrack = qs.filter((q) => !q.tracks.includes(s.track)).map((q) => q.code);
     if (wrongTrack.length) errors.push(`${id}: вопросы другого трека ${wrongTrack.join(", ")}`);
 
-    const lv = parsed.rules?.levels?.[s.size];
-    if (lv) {
-      const got = { oson: 0, orta: 0, qiyin: 0 };
-      qs.forEach((q) => { got[q.level] += 1; });
-      if (got.oson !== lv.oson || got.orta !== lv.orta || got.qiyin !== lv.qiyin) {
-        warnings.push(`${id}: уровни ${got.oson}/${got.orta}/${got.qiyin}, по правилу ${lv.oson}/${lv.orta}/${lv.qiyin}`);
-      }
-    }
+    // Одинаковая сложность каждого собеседования: состав по уровням — ошибка, не предупреждение.
+    const lv = checkSetLevels(qs.map((q) => q.level), parsed.rules);
+    if (!lv.ok) errors.push(`${id}: уровни ${fmt(lv.got)}, по правилу ${fmt(lv.want)}`);
     const practical = qs.filter((q) => q.isPractical).length;
     if (parsed.rules?.minPractical != null && practical < parsed.rules.minPractical) {
       warnings.push(`${id}: amaliy ${practical} < ${parsed.rules.minPractical}`);

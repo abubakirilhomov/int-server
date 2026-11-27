@@ -8,7 +8,8 @@
 // вопроса из conflict-группы.
 // Мягко (подбираем, а если не вышло — отдаём нарушения, не прячем): минимум
 // amaliy (rules.minPractical), хотя бы одно мини-задание, без вопросов из
-// `exclude` (последние собеседования трека и прошлые попытки кандидата).
+// `exclude` (последние собеседования трека и прошлые попытки кандидата) —
+// повторы не нарушение правила: отдаются отдельно в `repeated`, минимальными.
 //
 // Алгоритм: случайный жадный подбор с повторами, лучший по числу мягких нарушений.
 const { levelQuota } = require("./setLevels");
@@ -73,8 +74,6 @@ function softViolations(qs, rules, avoid, pool) {
     v.push(`amaliy ${practical} < ${rules.minPractical}`);
   }
   if (pool.some((q) => q.isMiniTask) && !qs.some((q) => q.isMiniTask)) v.push("нет мини-задания");
-  const repeated = qs.filter((q) => avoid.has(q.code)).map((q) => q.code);
-  if (repeated.length) v.push(`повтор недавних: ${repeated.join(", ")}`);
   return v;
 }
 
@@ -85,7 +84,9 @@ function softViolations(qs, rules, avoid, pool) {
  * @param {number} p.size
  * @param {object} [p.rules]    Setting questionBankRules.value
  * @param {Array}  [p.exclude]  коды, которых лучше избежать
- * @returns {{codes: string[], violations: string[]}}
+ * @returns {{codes: string[], violations: string[], repeated: string[]}}
+ *   violations — нарушения правила (amaliy, мини-задание, квоты тем);
+ *   repeated — коды из exclude, которые пришлось взять (информация, не нарушение).
  */
 function generateSet({ questions, track, size, rules, exclude = [], rng = Math.random, attempts = 400 }) {
   const want = levelQuota(size, rules);
@@ -101,8 +102,11 @@ function generateSet({ questions, track, size, rules, exclude = [], rng = Math.r
       const picked = attempt(pool, groups, want, rng, avoid);
       if (!picked) continue;
       const violations = softViolations(picked, rules, avoid, pool);
-      if (!best || violations.length < best.violations.length) best = { picked, violations };
-      if (!violations.length) break;
+      const repeated = picked.filter((q) => avoid.has(q.code)).map((q) => q.code);
+      // Нарушение правила весит больше любого числа повторов.
+      const cost = violations.length * 1000 + repeated.length;
+      if (!best || cost < best.cost) best = { picked, violations, repeated, cost };
+      if (!cost) break;
     }
     return best;
   };
@@ -115,7 +119,8 @@ function generateSet({ questions, track, size, rules, exclude = [], rng = Math.r
   if (!best) {
     throw new Error(`Не удалось собрать набор ${track} из ${size}: в банке не хватает вопросов под правило уровней/тем`);
   }
-  return { codes: sortSet(best.picked).map((q) => q.code), violations: best.violations };
+  const codes = sortSet(best.picked).map((q) => q.code);
+  return { codes, violations: best.violations, repeated: codes.filter((c) => avoid.has(c)) };
 }
 
 module.exports = { generateSet, sortSet };

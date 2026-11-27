@@ -169,3 +169,17 @@ describe("ротация наборов", () => {
     expect(overlapMatrix([["a", "b"], ["b", "c"], ["x"]])).toEqual([[2, 1, 0], [1, 2, 0], [0, 0, 1]]);
   });
 });
+
+describe("повторы — не нарушение", () => {
+  test("при тесном банке повторы идут в repeated, violations пуст, повторов минимум", () => {
+    // Исключаем почти все свежие: повторы неизбежны, но правило уровней/квот соблюдено без нарушений.
+    const exclude = BANK.filter((q) => q.tracks.includes("frontend-react")).slice(0, 45).map((q) => q.code);
+    for (let seed = 1; seed <= 100; seed += 1) {
+      const r = generateSet({ questions: BANK, track: "frontend-react", size: 18, rules: RULES, exclude, rng: rngFrom(seed) });
+      expect(r.codes).toHaveLength(18);
+      expect(r.violations.join("|")).not.toMatch(/повтор/);
+      expect(r.repeated.every((c) => exclude.includes(c))).toBe(true);
+      expect(r.repeated).toEqual(r.codes.filter((c) => exclude.includes(c)));
+    }
+  });
+});

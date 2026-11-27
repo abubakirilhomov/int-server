@@ -76,7 +76,8 @@ test("exclude: недавние вопросы не берутся, пока х�
   const most = POOL.filter((q) => q.topic === "react").slice(0, 13).map((q) => q.code);
   const r = generateSet({ questions: POOL, track: "frontend-react", size: 18, rules: RULES, exclude: most, rng: rngFrom(12) });
   expect(r.codes).toHaveLength(18);
-  expect(r.violations.join(" ")).toMatch(/повтор недавних/);
+  expect(r.repeated.length).toBeGreaterThan(0);
+  expect(r.violations.join(" ")).not.toMatch(/повтор/); // повтор — не нарушение правила
 });
 
 test("банк не тянет правило → понятная ошибка", () => {

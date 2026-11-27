@@ -134,7 +134,7 @@ exports.previewSet = catchAsync(async (req, res) => {
   } catch (e) {
     throw new AppError(e.message, 422);
   }
-  res.json({ track, size, questionCodes: r.codes, violations: r.violations, overlap: r.overlap, retake: r.retake });
+  res.json({ track, size, questionCodes: r.codes, violations: r.violations, repeated: r.repeated, overlap: r.overlap, retake: r.retake });
 });
 
 exports.setsOverview = catchAsync(async (req, res) => {

@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
 
 // Треки приёма. Банк тем (InterviewTopic) тоже ключится по track.
-const TRACKS = ["frontend-react", "backend-nodejs"];
+const TRACKS = ["frontend-react", "backend-nodejs", "frontend-vue"];
+// checklist — старый ScoringModal по темам; live — живая сессия по банку вопросов.
+const MODES = ["checklist", "live"];
 const STATUSES = ["scheduled", "completed", "no_show", "canceled"];
 const RESULTS = ["pass", "partial", "fail"];
 
@@ -10,6 +12,8 @@ const RESULTS = ["pass", "partial", "fail"];
 const itemSchema = new mongoose.Schema(
   {
     topic: { type: mongoose.Schema.Types.ObjectId, ref: "InterviewTopic" },
+    // mode=live: код вопроса банка (H1, J22…) вместо ссылки на тему.
+    questionCode: { type: String, default: undefined },
     label: String,
     labelRu: String,
     category: String,
@@ -30,6 +34,7 @@ const interviewSchema = new mongoose.Schema(
       index: true,
     },
     track: { type: String, enum: TRACKS, required: true },
+    mode: { type: String, enum: MODES, default: "checklist" },
 
     // Расписание (Фаза 1)
     scheduledAt: { type: Date, required: true, index: true },
@@ -59,6 +64,7 @@ const interviewSchema = new mongoose.Schema(
 );
 
 interviewSchema.statics.TRACKS = TRACKS;
+interviewSchema.statics.MODES = MODES;
 interviewSchema.statics.STATUSES = STATUSES;
 interviewSchema.statics.RESULTS = RESULTS;
 

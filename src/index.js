@@ -142,6 +142,7 @@ app.use("/api/badges", require("./routes/badgeRoutes"));
 app.use("/api/head-intern", require("./routes/headInternRoutes"));
 app.use("/api/monthly-interviews", require("./routes/monthlyInterviewRoutes"));
 app.use("/api/monthly-interview-sessions", require("./routes/monthlyInterviewSessionRoutes"));
+app.use("/api/question-bank", require("./routes/questionBankRoutes"));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

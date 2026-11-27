@@ -7,6 +7,7 @@ const CandidateAccess = require("../models/candidateAccessModel");
 const InterviewSession = require("../models/interviewSessionModel");
 const Answer = require("../models/answerModel");
 const Application = require("../models/applicationModel");
+const BankQuestion = require("../models/bankQuestionModel");
 const catchAsync = require("../utils/catchAsync");
 const { accessDenial } = require("../middleware/candidateAuth");
 const { toCandidateSession, visibleQuestions } = require("../serializers/candidateView");
@@ -142,6 +143,31 @@ exports.putAnswer = catchAsync(async (req, res) => {
     savedAt: answer.draftUpdatedAt,
     submittedAt: answer.submittedAt || null,
   });
+});
+
+// ─── GET /questions/:position/tests → { tests: [{ name, code }] }
+// Автотесты мини-задания для кнопки «Прогнать у себя»: выполняет их только браузер,
+// в песочнице. Только для ОТКРЫТОГО вопроса с тестами; код нигде не показывается
+// (UI выводит названия и результат), в сессию (GET /session) код не попадает.
+exports.getTests = catchAsync(async (req, res) => {
+  const session = await sessionOf(req, res);
+  if (!session) return;
+  if (session.status === "finished" || session.status === "aborted") return fail(res, 409, "finished", "Собеседование завершено");
+  const position = Number(req.params.position);
+  const q = visibleQuestions(session)[position - 1];
+  if (!Number.isInteger(position) || !q) return fail(res, 404, "not_found", "Вопрос не найден");
+  if (q.state !== "open") return fail(res, 409, "closed", "Вопрос закрыт");
+  // Тесты в снимке есть только у вопросов, у которых они были на старте сессии.
+  if (!q.tests?.length) return fail(res, 404, "no_tests", "У этого вопроса нет автотестов");
+  const bank = await BankQuestion.findOne({ code: q.code }).select("+tests").lean();
+  const lang = normalizeLanguage(req.query.lang || session.language);
+  const tests = (bank?.tests || []).map((t) => ({
+    name: lang === "ru" && t.nameRu && String(t.nameRu).trim() ? String(t.nameRu) : String(t.name || ""),
+    code: String(t.code || ""),
+  }));
+  if (!tests.length) return fail(res, 404, "no_tests", "У этого вопроса нет автотестов");
+  res.set("Cache-Control", "no-store");
+  res.json({ tests });
 });
 
 // ─── POST /signals { type: focus_lost|focus_back|paste, position?, meta? } ──

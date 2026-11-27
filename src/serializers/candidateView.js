@@ -13,6 +13,7 @@
 // (demoFix) кандидату не отдаётся никогда — здесь её даже не читают.
 const { normalizeLanguage, localized, localizedOptions } = require("../utils/questionBank/i18n");
 const { editorFor } = require("../config/questionBankTopics");
+const { testNames } = require("../utils/questionBank/tests");
 
 const DEMO_FIELDS = ["html", "css", "height", "width", "slider", "layers3d"];
 const STEP_FIELDS = ["type", "ms", "target", "to", "className"];
@@ -66,6 +67,9 @@ function toCandidateQuestion(q, position, lang) {
   }
   const demo = toCandidateDemo(q.demo, lang);
   if (demo) out.demo = demo;
+  // Автотесты: только названия проверок. Код тестов сюда не попадает никогда
+  // (testNames берёт одно поле); он выдаётся отдельным запросом по кнопке «Прогнать у себя».
+  if (editor && Array.isArray(q.tests) && q.tests.length) out.tests = testNames(q.tests, lang);
   return out;
 }
 

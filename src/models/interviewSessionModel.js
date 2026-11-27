@@ -22,6 +22,9 @@ const sessionQuestionSchema = new mongoose.Schema(
     promptShortRu: { type: String, default: "" },
     options: { type: [{ _id: false, key: String, text: String, textRu: String }], default: undefined },
     answerKind: { type: String, default: "text" },
+    editor: { type: String, default: undefined },
+    // Только названия проверок (код тестов — в банке, выдаётся отдельно).
+    tests: { type: [{ _id: false, name: String, nameRu: { type: String, default: "" } }], default: undefined },
     sandbox: {
       template: { type: String, default: undefined },
       files: { type: Map, of: String, default: undefined },

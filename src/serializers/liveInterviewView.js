@@ -108,6 +108,8 @@ function toLiveView(session, ctx) {
         : undefined,
       demo: q.demo || undefined,
       demoFix: bank.demoFix || undefined,
+      // Автотесты (с кодом) — только интервьюеру; запускает браузер в песочнице.
+      tests: (bank.tests || []).map((t) => ({ name: t.name, nameRu: t.nameRu || "", code: t.code })),
       expectedAnswer: bank.expectedAnswer || "",
       expectedAnswerRu: bank.expectedAnswerRu || "",
       state: q.state,

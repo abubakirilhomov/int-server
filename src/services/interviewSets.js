@@ -160,10 +160,11 @@ function overlapMatrix(codeLists) {
 }
 
 // Страница «Наборы»: использование каждого набора (кому и когда) + пересечения
-// между последними собеседованиями трека.
+// между последними собеседованиями трека. Архивные наборы (isActive:false) в
+// ротацию не идут, но их история остаётся: отдельным списком `archived`.
 async function setsOverview({ track, recentN = 8, usesPerSet = 5 }) {
-  const [sets, sessions] = await Promise.all([
-    InterviewSet.find({ track, isActive: true }).sort({ number: 1 }).select("number source size questionCodes").lean(),
+  const [allSets, sessions] = await Promise.all([
+    InterviewSet.find({ track }).sort({ number: 1 }).select("number source size questionCodes isActive").lean(),
     InterviewSession.find({ track }).sort({ createdAt: -1 })
       .select("set interviewer status startedAt createdAt questions.code")
       .populate({ path: "interview", select: "application percentage passed status attemptNumber",
@@ -177,10 +178,10 @@ async function setsOverview({ track, recentN = 8, usesPerSet = 5 }) {
     if (!bySet.has(k)) bySet.set(k, []);
     bySet.get(k).push(s);
   });
-  const usage = sets.map((st) => {
+  const usageOf = (st) => {
     const list = bySet.get(String(st._id)) || [];
     return {
-      _id: st._id, number: st.number, source: st.source, size: st.size,
+      _id: st._id, number: st.number, source: st.source, size: st.size, isActive: st.isActive !== false,
       usedCount: list.length,
       lastUsedAt: list[0] ? (list[0].startedAt || list[0].createdAt) : null,
       uses: list.slice(0, usesPerSet).map((s) => ({
@@ -192,12 +193,14 @@ async function setsOverview({ track, recentN = 8, usesPerSet = 5 }) {
         passed: s.interview?.status === "completed" ? s.interview.passed : null,
       })),
     };
-  });
+  };
+  const sets = allSets.filter((x) => x.isActive !== false);
   const last = sessions.slice(0, recentN);
-  const setNumber = new Map(sets.map((x) => [String(x._id), x.number]));
+  const setNumber = new Map(allSets.map((x) => [String(x._id), x.number]));
   return {
     track,
-    sets: usage,
+    sets: sets.map(usageOf),
+    archived: allSets.filter((x) => x.isActive === false).map(usageOf),
     totalSessions: sessions.length,
     recent: {
       items: last.map((s) => ({

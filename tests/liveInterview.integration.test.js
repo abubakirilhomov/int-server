@@ -452,3 +452,69 @@ describe("окно доступа, сброс пароля, блокировка
     expect((await login(cred.username, r.body.credentials.password)).status).toBe(200);
   });
 });
+
+describe("этап 3: пересдача, пересечения, страница «Наборы»", () => {
+  let app;
+  let first;
+  let second;
+
+  beforeAll(async () => {
+    first = await newInterview("Retake");
+    app = first.application;
+    const r = await api("POST", `/api/interviews/${first._id}/live`, { token: adminToken, body: { setId: String((await InterviewSet.findOne({ number: 1 }))._id) } });
+    expect(r.status).toBe(201);
+    second = await Interview.create({ application: app, track: "frontend-react", scheduledAt: new Date(), status: "scheduled", attemptNumber: 2 });
+  });
+
+  test("первое собеседование: пересечений нет, не пересдача", async () => {
+    const fresh = await newInterview("Fresh");
+    const r = await api("GET", `/api/interviews/live/sets?interviewId=${fresh._id}`, { token: adminToken });
+    expect(r.body.retake).toEqual({ isRetake: false, priorQuestions: 0 });
+    r.body.sets.forEach((s) => expect(s.overlap).toBe(0));
+    expect(r.body.sizeRange).toEqual({ min: 15, max: 20 });
+    expect(r.body.defaultSize).toBe(18);
+  });
+
+  test("пересдача: у каждого набора число общих вопросов с прошлой попыткой; прошлый набор — 6, предложен не он", async () => {
+    const r = await api("GET", `/api/interviews/live/sets?interviewId=${second._id}`, { token: adminToken });
+    expect(r.body.retake).toEqual({ isRetake: true, priorQuestions: 6 });
+    const byNum = new Map(r.body.sets.map((s) => [s.number, s]));
+    expect(byNum.get(1).overlap).toBe(6);
+    expect(byNum.get(2).overlap).toBe(0);
+    expect(String(r.body.suggestedSetId)).not.toBe(String(byNum.get(1)._id));
+  });
+
+  test("пересдача: сгенерированный набор обходит прошлые вопросы и сообщает пересечение", async () => {
+    const r = await api("POST", "/api/interviews/live/sets/preview", {
+      token: adminToken, body: { track: "frontend-react", size: 6, interviewId: String(second._id) },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.retake).toBe(true);
+    expect(typeof r.body.overlap).toBe("number");
+    expect(r.body.overlap).toBe(r.body.questionCodes.filter((c) => SET1.includes(c)).length);
+  });
+
+  test("размер: нецелый → 400, вне правила → 422", async () => {
+    const bad = await api("POST", "/api/interviews/live/sets/preview", { token: adminToken, body: { track: "frontend-react", size: "abc" } });
+    expect(bad.status).toBe(400);
+    const none = await api("POST", "/api/interviews/live/sets/preview", { token: adminToken, body: { track: "frontend-react", size: 40 } });
+    expect(none.status).toBe(422);
+  });
+
+  test("обзор: использование наборов, кому и когда, матрица пересечений последних", async () => {
+    const r = await api("GET", "/api/interviews/live/sets/overview?track=frontend-react&recent=5", { token: adminToken });
+    expect(r.status).toBe(200);
+    const set1 = r.body.sets.find((s) => s.number === 1);
+    expect(set1.usedCount).toBeGreaterThanOrEqual(1);
+    expect(set1.uses[0].candidate).toContain("Retake");
+    const n = r.body.recent.items.length;
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(n).toBeLessThanOrEqual(5);
+    expect(r.body.recent.overlap).toHaveLength(n);
+    r.body.recent.overlap.forEach((row, i) => { expect(row).toHaveLength(n); expect(row[i]).toBe(6); });
+    expect(r.body.recent.overlap[0][1]).toBe(r.body.recent.overlap[1][0]);
+    expect(JSON.stringify(r.body)).not.toContain("MAXFIY");
+    expect((await api("GET", "/api/interviews/live/sets/overview", { token: adminToken })).status).toBe(400);
+    expect((await api("GET", "/api/interviews/live/sets/overview?track=frontend-react", { token: mentorToken })).status).toBe(403);
+  });
+});

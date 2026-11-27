@@ -2,14 +2,17 @@
 //
 // Жёстко (иначе набор не сохраняется — InterviewSet pre-validate): состав по
 // уровням из levelQuota (18 = 4/9/5 и т. д.). Если в правилах есть квоты по
-// темам для трека и размера — они тоже жёсткие. Не больше одного вопроса из
-// conflict-группы.
+// темам для трека и размера (для 16/17/19 — пропорционально ближайшему) — они
+// тоже жёсткие, но если банк их не тянет вместе с уровнями, набор собирается
+// по одним уровням и квоты тем показываются как нарушение. Не больше одного
+// вопроса из conflict-группы.
 // Мягко (подбираем, а если не вышло — отдаём нарушения, не прячем): минимум
 // amaliy (rules.minPractical), хотя бы одно мини-задание, без вопросов из
 // `exclude` (последние собеседования трека и прошлые попытки кандидата).
 //
 // Алгоритм: случайный жадный подбор с повторами, лучший по числу мягких нарушений.
 const { levelQuota } = require("./setLevels");
+const { topicQuota } = require("./topicQuota");
 const { TOPICS } = require("../../config/questionBankTopics");
 
 const LEVELS = ["oson", "orta", "qiyin"];
@@ -32,13 +35,6 @@ function sortSet(qs) {
     (a.order || 0) - (b.order || 0) ||
     String(a.code).localeCompare(String(b.code))
   );
-}
-
-function topicQuotaFor(rules, track, size) {
-  const q = rules?.quotas?.[track]?.[size];
-  if (!Array.isArray(q) || !q.length) return null;
-  const sum = q.reduce((s, g) => s + Number(g.count || 0), 0);
-  return sum === size ? q : null; // квоты, не дающие размер, не применяем
 }
 
 // Одна попытка: группы (темы или одна общая) заполняются случайно, следя за
@@ -95,19 +91,26 @@ function generateSet({ questions, track, size, rules, exclude = [], rng = Math.r
   const want = levelQuota(size, rules);
   if (!want) throw new Error(`Нет правила уровней для набора из ${size}`);
   const pool = (questions || []).filter((q) => q.isActive !== false && (q.tracks || []).includes(track));
-  const tq = topicQuotaFor(rules, track, size);
-  const groups = tq
-    ? tq.map((g) => ({ topics: g.topics, count: Number(g.count) }))
-    : [{ topics: [...new Set(pool.map((q) => q.topic))], count: size }];
+  const tq = topicQuota(rules, track, size);
+  const allTopics = [...new Set(pool.map((q) => q.topic))];
   const avoid = new Set(exclude);
 
-  let best = null;
-  for (let i = 0; i < attempts; i += 1) {
-    const picked = attempt(pool, groups, want, rng, avoid);
-    if (!picked) continue;
-    const violations = softViolations(picked, rules, avoid, pool);
-    if (!best || violations.length < best.violations.length) best = { picked, violations };
-    if (!violations.length) break;
+  const search = (groups) => {
+    let best = null;
+    for (let i = 0; i < attempts; i += 1) {
+      const picked = attempt(pool, groups, want, rng, avoid);
+      if (!picked) continue;
+      const violations = softViolations(picked, rules, avoid, pool);
+      if (!best || violations.length < best.violations.length) best = { picked, violations };
+      if (!violations.length) break;
+    }
+    return best;
+  };
+
+  let best = tq ? search(tq.map((g) => ({ topics: g.topics, count: g.count }))) : null;
+  if (!best) {
+    best = search([{ topics: allTopics, count: size }]);
+    if (best && tq) best.violations.unshift("квоты тем не соблюдены: банк не тянет их вместе с правилом уровней");
   }
   if (!best) {
     throw new Error(`Не удалось собрать набор ${track} из ${size}: в банке не хватает вопросов под правило уровней/тем`);

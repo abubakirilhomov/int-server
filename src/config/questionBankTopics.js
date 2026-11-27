@@ -19,7 +19,7 @@ const TOPIC_DEFS = [
   { prefix: "J", editor: "js", topic: "js", tracks: [FR, FV], codeLang: "js", names: ["JavaScript"], label: { uz: "JavaScript", ru: "JavaScript" } },
   { prefix: "R", editor: "jsx", topic: "react", tracks: [FR], codeLang: "jsx", names: ["React"], label: { uz: "React", ru: "React" } },
   { prefix: "V", editor: "vue", topic: "vue", tracks: [FV], codeLang: "vue", names: ["Vue"], label: { uz: "Vue", ru: "Vue" } },
-  { prefix: "T", editor: "html", topic: "tailwind", tracks: [FV], codeLang: "html", names: ["Tailwind CSS", "Tailwind"], label: { uz: "Tailwind CSS", ru: "Tailwind CSS" } },
+  { prefix: "T", editor: "tailwind", topic: "tailwind", tracks: [FV], codeLang: "html", names: ["Tailwind CSS", "Tailwind"], label: { uz: "Tailwind CSS", ru: "Tailwind CSS" } },
   { prefix: "N", editor: "node", topic: "node", tracks: [BN], codeLang: "js", names: ["Node.js", "Node"], label: { uz: "Node.js", ru: "Node.js" } },
   { prefix: "E", editor: "node", topic: "express", tracks: [BN], codeLang: "js", names: ["Express.js", "Express"], label: { uz: "Express", ru: "Express" } },
   { prefix: "D", editor: "node", topic: "database", tracks: [BN], codeLang: "js", names: ["MongoDB", "Ma'lumotlar bazasi", "SQL"], label: { uz: "Ma'lumotlar bazasi", ru: "Базы данных" } },
@@ -30,9 +30,10 @@ const PREFIX = Object.fromEntries(TOPIC_DEFS.map((d) => [d.prefix, { topic: d.to
 const CODE_LANG = Object.fromEntries(TOPIC_DEFS.map((d) => [d.prefix, d.codeLang]));
 // Редактор ответа на amaliy-вопрос у кандидата (этап 4): web — HTML-документ
 // со стилями и скриптами, js — чистый JS; у них есть превью и консоль в
-// песочнице. jsx / vue / html / node — только подсветка (Sandpack — этап 5).
+// песочнице. jsx (R), vue (V), tailwind (T — Vue + Tailwind v4) — превью на Sandpack
+// (этап 5). html / node — только подсветка.
 const EDITOR_BY_PREFIX = Object.fromEntries(TOPIC_DEFS.map((d) => [d.prefix, d.editor]));
-const EDITOR_BY_TEMPLATE = { static: "web", vanilla: "js", react: "jsx", vue: "vue", "vue-tailwind": "vue", node: "node" };
+const EDITOR_BY_TEMPLATE = { static: "web", vanilla: "js", react: "jsx", vue: "vue", "vue-tailwind": "tailwind", node: "node" };
 
 // Вопрос (снимок сессии или банк) → редактор; null — ответ не код.
 function editorFor(q) {

@@ -6,7 +6,7 @@ const GradeConfig = require("../models/gradeConfigModel");
 const { getInternPlanStatus } = require("../utils/internPlanStatus");
 const { getWeeklyPlanView } = require("../services/weeklyPlanService");
 const { tashkentMonthBounds } = require("../utils/tashkentTime");
-const { computePenalties, buildRuleMap } = require("../utils/penaltyUtils");
+const { computePenalties, buildRuleMap, splitViolations } = require("../utils/penaltyUtils");
 const { frozenDaysBetween } = require("../utils/trialCountingFreeze");
 
 const MAX_SCORE = 5;
@@ -252,6 +252,9 @@ exports.getDashboardStats = async (req, res) => {
         const allRules = await Rule.find({}).select("category").lean();
         const ruleMap = buildRuleMap(allRules);
         const penaltyInfo = computePenalties(user.violations || [], ruleMap);
+        // Green (rag'bat) shtraflar ro'yxatiga tushmaydi; har yozuvga `rule`
+        // beriladi — aks holda frontend "Sariq · Noma'lum qoida" ko'rsatardi.
+        const { penalties: dashboardViolations, praises } = splitViolations(user.violations || [], ruleMap);
 
         // 🔹 Yutuqlar: dashboard yuklanganda tekshirib, yangi ochilganlarni
         // qaytaramiz (frontend chiroqli notification ko'rsatadi).
@@ -318,7 +321,8 @@ exports.getDashboardStats = async (req, res) => {
             xp: user.xp || 0,
             level: user.level || 1,
             // 🔹 Shtraf: violations ro'yxati + penaltyInfo
-            violations: user.violations || [],
+            violations: dashboardViolations,
+            praises,
             violationsCount: user.violationsCount || 0,
             lastViolationAt: user.lastViolationAt || null,
             penaltyInfo,

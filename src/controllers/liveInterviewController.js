@@ -46,6 +46,13 @@ function bumpRev(sessionId, candidateVisible) {
   return InterviewSession.updateOne({ _id: sessionId }, { $inc: inc });
 }
 
+// Вид из уже загруженной (и сохранённой) сессии — без повторного чтения.
+// rev в ответе = прежний + 1: если параллельно был ещё инкремент (черновик
+// кандидата), клиент просто получит 200 на следующем опросе вместо 304.
+function viewAfterBump(session) {
+  return buildView(session, { rev: (session.rev || 0) + 1 });
+}
+
 // Полный вид для интервьюера (после каждого действия и в опросе).
 async function buildView(sessionOrId, extra = {}) {
   const session = sessionOrId instanceof InterviewSession
@@ -276,14 +283,12 @@ exports.questionAction = catchAsync(async (req, res) => {
     }
   }
   await session.save();
-  await bumpRev(session._id, true);
-  if (freeze.length) {
-    await Answer.updateMany({ session: session._id, questionCode: { $in: freeze }, frozenAt: null }, { $set: { frozenAt: now } });
-  }
-  if (unfreeze.length) {
-    await Answer.updateMany({ session: session._id, questionCode: { $in: unfreeze } }, { $set: { frozenAt: null } });
-  }
-  res.json(await buildView(session._id));
+  await Promise.all([
+    bumpRev(session._id, true),
+    freeze.length && Answer.updateMany({ session: session._id, questionCode: { $in: freeze }, frozenAt: null }, { $set: { frozenAt: now } }),
+    unfreeze.length && Answer.updateMany({ session: session._id, questionCode: { $in: unfreeze } }, { $set: { frozenAt: null } }),
+  ]);
+  res.json(await viewAfterBump(session));
 });
 
 // ─── Оценка и заметка: { result: pass|partial|fail|null, note } ─────────────
@@ -302,7 +307,7 @@ exports.rateQuestion = catchAsync(async (req, res) => {
   if ("note" in body) q.note = String(body.note ?? "").slice(0, 2000);
   await session.save();
   await bumpRev(session._id, false);
-  res.json(await buildView(session._id));
+  res.json(await viewAfterBump(session));
 });
 
 // ─── Доступ: сбросить пароль / продлить ──────────────────────────────────────

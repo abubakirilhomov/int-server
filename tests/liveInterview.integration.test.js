@@ -176,6 +176,16 @@ describe("полный цикл живого собеседования", () => 
     expectNoSecrets(r.body);
   });
 
+  test("токен без iid (выдан до ускорения опроса) тоже работает", async () => {
+    const { keyFor } = require("../src/utils/tokenKeys");
+    const claims = jwt.verify(ctoken, keyFor("candidate"), { audience: "candidate" });
+    expect(claims.iid).toBe(String(ivA._id));
+    const legacy = jwt.sign({ sub: claims.sub, v: claims.v, typ: "candidate" }, keyFor("candidate"), { audience: "candidate", expiresIn: 600 });
+    const r = await api("GET", "/api/candidate/session", { token: legacy });
+    expect(r.status).toBe(200);
+    expect((await api("GET", `/api/candidate/session?rev=${r.body.rev}`, { token: legacy })).status).toBe(304);
+  });
+
   test("до открытия — ожидание; ?rev → 304", async () => {
     const r = await api("GET", "/api/candidate/session", { token: ctoken });
     expect(r.status).toBe(200);

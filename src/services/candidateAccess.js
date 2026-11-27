@@ -109,7 +109,8 @@ function signCandidateToken(access, now = new Date()) {
   const left = Math.floor((access.expiresAt.getTime() - now.getTime()) / 1000);
   const ttl = Math.max(60, Math.min(MAX_TOKEN_TTL_SEC, left));
   return jwt.sign(
-    { sub: String(access._id), v: access.tokenVersion, typ: "candidate" },
+    // iid — собеседование: опрос сессии читает rev параллельно с проверкой доступа.
+    { sub: String(access._id), v: access.tokenVersion, typ: "candidate", iid: String(access.interview) },
     keyFor("candidate"),
     { algorithm: "HS256", audience: TOKEN_AUDIENCE, expiresIn: ttl }
   );

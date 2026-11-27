@@ -71,24 +71,26 @@ async function sessionOf(req, res) {
 }
 
 // ─── GET /session?rev=N&lang=uz|ru → 304, если для кандидата ничего не изменилось
-// Сначала лёгкий запрос (rev и язык): пустой опрос не тянет из БД снимки вопросов.
+// Сначала лёгкий запрос (rev и язык; в candidateAuth — параллельно с доступом):
+// пустой опрос не тянет из БД снимки вопросов. При изменениях — снимок, имя и
+// ответы одним параллельным заходом.
 exports.getSession = catchAsync(async (req, res) => {
   const lang = req.query.lang ? normalizeLanguage(req.query.lang) : null;
   const interview = req.candidate.access.interview;
-  if (req.query.rev !== undefined) {
-    const head = await InterviewSession.findOne({ interview }).select("candidateRev language").lean();
-    if (!head) return fail(res, 404, "no_session", "Собеседование ещё не начато");
-    if (Number(req.query.rev) === head.candidateRev && (!lang || lang === head.language)) {
-      return res.status(304).end();
-    }
+  let head = req.candidate.headP ? await req.candidate.headP : undefined;
+  if (head === undefined) {
+    head = await InterviewSession.findOne({ interview }).select("_id candidateRev language").lean();
   }
-  const [session, app] = await Promise.all([
-    InterviewSession.findOne({ interview }),
+  if (!head) return fail(res, 404, "no_session", "Собеседование ещё не начато");
+  if (req.query.rev !== undefined && Number(req.query.rev) === head.candidateRev && (!lang || lang === head.language)) {
+    return res.status(304).end();
+  }
+  const [session, app, answers] = await Promise.all([
+    InterviewSession.findById(head._id),
     Application.findById(req.candidate.access.application).select("firstName lastName").lean(),
+    Answer.find({ session: head._id }).lean(),
   ]);
   if (!session) return fail(res, 404, "no_session", "Собеседование ещё не начато");
-  const codes = visibleQuestions(session).map((q) => q.code);
-  const answers = await Answer.find({ session: session._id, questionCode: { $in: codes } }).lean();
   // Своё имя и направление — для строки на экране ожидания (больше о человеке ничего).
   const me = { name: app ? `${app.firstName || ""} ${app.lastName || ""}`.trim() : "", track: session.track };
   res.json({ ...toCandidateSession(session, lang, new Map(answers.map((a) => [a.questionCode, a]))), me });

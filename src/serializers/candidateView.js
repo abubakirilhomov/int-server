@@ -7,7 +7,33 @@
 //
 // Язык: кандидат получает тексты на выбранном языке (uz | ru); если перевода
 // нет — узбекский. Варианты ответа — без отметки верного.
+//
+// Живая сцена (demo): только при audience "candidate" (сцена «для интервьюера»
+// сама содержит ответ) и только поля из DEMO_FIELDS. Исправленная сцена
+// (demoFix) кандидату не отдаётся никогда — здесь её даже не читают.
 const { normalizeLanguage, localized, localizedOptions } = require("../utils/questionBank/i18n");
+
+const DEMO_FIELDS = ["html", "css", "height", "width", "slider", "layers3d"];
+const STEP_FIELDS = ["type", "ms", "target", "to", "className"];
+
+function plainSteps(steps) {
+  if (!Array.isArray(steps) || !steps.length) return [];
+  return steps.map((s) => {
+    const src = s && typeof s.toObject === "function" ? s.toObject() : s || {};
+    const out = {};
+    STEP_FIELDS.forEach((k) => { if (src[k] !== undefined) out[k] = src[k]; });
+    return out;
+  });
+}
+
+function toCandidateDemo(demo, lang) {
+  if (!demo || !demo.html || (demo.audience || "candidate") !== "candidate") return undefined;
+  const out = {};
+  DEMO_FIELDS.forEach((k) => { if (demo[k] !== undefined) out[k] = demo[k]; });
+  out.steps = plainSteps(demo.steps);
+  out.caption = localized(demo, "caption", lang);
+  return out;
+}
 
 function plainFiles(files) {
   if (!files) return undefined;
@@ -34,6 +60,8 @@ function toCandidateQuestion(q, position, lang) {
   if (q.sandbox?.template || files) {
     out.sandbox = { template: q.sandbox?.template || null, files: files || {} };
   }
+  const demo = toCandidateDemo(q.demo, lang);
+  if (demo) out.demo = demo;
   return out;
 }
 
@@ -56,4 +84,4 @@ function toCandidateSession(session, lang) {
   };
 }
 
-module.exports = { toCandidateQuestion, toCandidateSession };
+module.exports = { toCandidateQuestion, toCandidateSession, toCandidateDemo };

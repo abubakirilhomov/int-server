@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const { TOPICS, PREFIX, CODE_PATTERN, BANK_TRACKS } = require("../config/questionBankTopics");
+const { questionDemoSchema, questionDemoFixSchema } = require("./schemas/questionDemoSchema");
+const { normalizeDemo, normalizeDemoFix } = require("../utils/questionBank/demo");
 
 // Банк вопросов для живых собеседований кандидатов.
 // Содержимое КОНФИДЕНЦИАЛЬНО: живёт только в БД, импортируется скриптами
@@ -61,6 +63,12 @@ const bankQuestionSchema = new mongoose.Schema(
     // Автотесты мини-заданий (этап 6). Кандидату не отдаются.
     tests: { type: [{ name: String, code: String }], default: [], select: false },
 
+    // Живая сцена под вопросом (utils/questionBank/demo.js). Кандидату — только
+    // при demo.audience "candidate". demoFix — исправленная сцена, ТОЛЬКО для
+    // интервьюера: select:false, как expectedAnswer.
+    demo: { type: questionDemoSchema, default: undefined },
+    demoFix: { type: questionDemoFixSchema, default: undefined, select: false },
+
     // Вопросы одной группы не попадают в один набор (правило раздела 2 банка).
     conflictGroup: { type: String, default: null },
 
@@ -74,6 +82,18 @@ const bankQuestionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Сцена проверяется целиком (типы шагов, лимиты) при каждом сохранении.
+bankQuestionSchema.pre("validate", function checkDemo() {
+  for (const [field, normalize] of [["demo", normalizeDemo], ["demoFix", normalizeDemoFix]]) {
+    if (!this.isModified(field) || !this[field]) continue;
+    try {
+      normalize(this[field].toObject ? this[field].toObject() : this[field]);
+    } catch (e) {
+      this.invalidate(field, e.message);
+    }
+  }
+});
 
 bankQuestionSchema.statics.TOPICS = TOPICS;
 bankQuestionSchema.statics.LEVELS = LEVELS;

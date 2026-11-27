@@ -129,3 +129,54 @@ describe("rateIntern: green qoida shtraf bo'lmaydi", () => {
     expect(computePenalties(saved.violations, ruleMap).totalDeduction).toBe(0.5);
   });
 });
+
+describe("GET /dashboard/stats: rag'bat shtraflar ro'yxatida emas", () => {
+  jest.setTimeout(120000);
+  let mongod;
+  const dashboardCtrl = require("../src/controllers/dashboardController");
+
+  beforeAll(async () => {
+    mongod = await MongoMemoryServer.create();
+    await mongoose.connect(mongod.getUri());
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await mongod.stop();
+  });
+
+  test("violations — faqat shtraflar, `rule` bilan; green — praises'da", async () => {
+    const branch = await Branch.create({ name: "Chilonzor" });
+    const mentor = await Mentor.create({
+      name: "Ment", lastName: "Or", password: "hashed-placeholder", branches: [branch._id],
+    });
+    const green = await Rule.create({ category: "green", title: "Mars nomidan tadbirda ishtirok etdi" });
+    const yellow = await Rule.create({ category: "yellow", title: "Kechikib keldi" });
+    const intern = await Intern.create({
+      name: "Dash", lastName: "Board", username: "db1", password: "password123",
+      grade: "middle", status: "active",
+      branches: [{ branch: branch._id, mentor: mentor._id }],
+      violations: [
+        { ruleId: green._id, date: new Date(), issuedBy: "mentor" },
+        { ruleId: yellow._id, date: new Date(), issuedBy: "mentor" },
+      ],
+    });
+
+    const body = await new Promise((resolve, reject) => {
+      const res = {
+        statusCode: 200,
+        status(c) { this.statusCode = c; return this; },
+        json(b) { resolve({ status: this.statusCode, body: b }); return this; },
+      };
+      dashboardCtrl.getDashboardStats({ user: { id: String(intern._id) } }, res).catch(reject);
+    });
+
+    expect(body.status).toBe(200);
+    expect(body.body.violations).toHaveLength(1);
+    expect(body.body.violations[0].rule.title).toBe("Kechikib keldi");
+    expect(body.body.praises).toHaveLength(1);
+    expect(body.body.praises[0].rule.title).toBe("Mars nomidan tadbirda ishtirok etdi");
+    expect(body.body.penaltyInfo.totalDeduction).toBe(0.5);
+    expect(body.body.penaltyInfo.worstLevel).toBe("yellow");
+  });
+});

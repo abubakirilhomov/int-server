@@ -16,14 +16,12 @@ const { getCandidateInterviewConfig } = require("../config/candidateInterviews")
 
 const isValidObjectId = (id) => mongoose.isValidObjectId(id);
 
-// Трек по сфере заявки (владелец принимает только frontend-react и backend-nodejs).
-const sphereToTrack = (sphere) =>
-  sphere === "backend-nodejs" ? "backend-nodejs" : "frontend-react";
-
-const TRACK_LABELS = {
-  "frontend-react": "Frontend (React)",
-  "backend-nodejs": "Backend (Node.js)",
-};
+// Трек по сфере заявки: JS · React, JS · Vue, Python (модель найма 27.11);
+// backend-nodejs — только для старых заявок. Прошедшие собеседования не меняются.
+const { sphereToTrack } = require("../config/questionBankTopics");
+const TRACK_LABELS = Object.fromEntries(
+  Object.entries(require("../config/questionBankTopics").TRACK_LABELS).map(([k, v]) => [k, v.ru])
+);
 
 // Собирает deep-link и человекочитаемые поля для одного интервью с
 // популированной заявкой.

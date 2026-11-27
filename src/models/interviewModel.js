@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
 
-// Треки приёма. Банк тем (InterviewTopic) тоже ключится по track.
-const TRACKS = ["frontend-react", "backend-nodejs", "frontend-vue"];
+// Треки приёма (config/questionBankTopics.BANK_TRACKS): JS · React, JS · Vue, Python;
+// backend-nodejs — архивный, остаётся ради истории. Банк тем (InterviewTopic) тоже ключится по track.
+const { BANK_TRACKS: TRACKS } = require("../config/questionBankTopics");
 // checklist — старый ScoringModal по темам; live — живая сессия по банку вопросов.
 const MODES = ["checklist", "live"];
 const STATUSES = ["scheduled", "completed", "no_show", "canceled"];

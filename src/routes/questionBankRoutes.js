@@ -13,5 +13,7 @@ router.patch("/questions/:code", ctrl.updateQuestion);
 router.post("/sets/check", ctrl.checkSet);
 router.post("/sets", ctrl.createSet);
 router.patch("/sets/:id", ctrl.updateSet);
+router.get("/rules/:track", ctrl.getRules);
+router.put("/rules/:track", ctrl.updateRules);
 
 module.exports = router;

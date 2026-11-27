@@ -101,3 +101,70 @@ function syntheticBackendBlocks() {
 }
 
 module.exports = { syntheticBlocks, syntheticBackendBlocks };
+
+// Синтетический Python-банк (формат «mars-intern-savollar-python»): ID с модулем (M3-01),
+// раздел 4 — пройденные модули, раздел 5 — ещё не пройденные (импорт неактивными),
+// правило набора — квоты по модулям для «6 savol». Тексты выдуманные.
+function syntheticPythonBlocks({ brokenSet = false } = {}) {
+  const pq = (id, level, practical, text, answer, codeLines = [], answerCode = []) => [
+    p(`${id}. [${level}${practical ? " · amaliy" : ""}] ${text}`),
+    ...codeLines.map((l) => (l === "" ? p(" ") : code(l))),
+    p(`Javob (chernovik): ${answer}`),
+    ...answerCode.map(code),
+  ];
+  return [
+    { type: "p", text: "Sintetik intern suhbati: Python yo'nalishi", style: "Title", mono: false },
+    h1("1. Hisob-kitob: savollar yetadimi?"),
+    p("Sintetik matn."),
+    h1("2. To'plam tuzish qoidasi"),
+    table([["Modul", "6 savol", "Bankda"], ["M3 · Sintetik asoslar", "2", "4"], ["M4 · Sintetik chuqur", "2", "4"], ["M7 · Sintetik SQL", "2", "3"], ["Jami", "6", "11"]]),
+    p("Daraja: 18 savolda 4 oson (isinish uchun) + 9 o'rta + 5 qiyin; 15 savolda 3 + 8 + 4; 20 savolda 4 + 11 + 5."),
+    p("Kamida 2 ta amaliy savol (20 savolda — 3), shundan bittasi 3–5 daqiqalik mini-topshiriq."),
+    p("Tartib: modul bo'yicha (M3 → M7), har modul ichida osondan qiyinga."),
+    p("Bir xil g'oyani tekshiradigan savollar bitta suhbatga tushmaydi: M3-01, M4-01; M3-02, M7-01; M3-03, M7-01."),
+    { type: "p", text: "1–2-modullar (HTML/CSS)", style: "Heading3", mono: false },
+    p("Intervyu oluvchi HTML/CSS bo'yicha ham so'ramoqchi bo'lsa — ko'pi bilan 1–2 ta savol, qo'shimcha sifatida (jami 20 dan oshmasin)."),
+    p("Python yo'nalishiga mos (JS talab qilmaydi): H2 (sintetik), C1 (sintetik)."),
+    p("Ishlatmang: H1 (JS'ga bog'liq)."),
+
+    h1("3. Tayyor to'plamlar (sintetik guruh: 3, 4, 7-modullar)"),
+    h2("1-to'plam"),
+    table([
+      ["№", "ID", "Daraja", "Savol (qisqa)"],
+      ["1", "M3-01", "oson, amaliy", "Sintetik qisqa M3-01"],
+      ["2", "M3-04", "qiyin, amaliy", "Sintetik qisqa M3-04"],
+      ["3", "M4-02", "o'rta, amaliy", "Sintetik qisqa M4-02"],
+      ["4", brokenSet ? "M4-01" : "M4-03", "o'rta", "x"],
+      ["5", "M7-02", "oson, amaliy", "x"],
+      ["6", "M7-03", "qiyin", "x"],
+    ]),
+    h2("2–2-to'plamlar (qisqa ko'rinish)"),
+    table([["To'plam", "M3", "M4", "M7"], ["2", "M3-02, M3-03", "M4-01, M4-04", "M7-02, M7-03"]]),
+    h2("Kim qaysi to'plamni oldi"),
+    table([["To'plam", "Sana", "Nomzod", "Intervyu oluvchi", "Izoh"], ["1", "", "", "", ""]]),
+
+    h1("4. Savollar banki — o'tilgan modullar"),
+    h2("M3 · Sintetik asoslar (4 ta)"),
+    ...pq("M3-01", "oson", true, "Sintetik: nima chiqadi?", "Sintetik javob M3-01.", ["def f():", "    return 1", "", "print(f())"]),
+    ...pq("M3-02", "o'rta", false, "Sintetik: nega?", "Sintetik javob M3-02."),
+    ...pq("M3-03", "o'rta", true, "Mini-topshiriq (3–5 daqiqa): sintetik funksiya yozing.", "Namuna:", [], ["with open('a.txt') as f:", "    print(f.read())"]),
+    ...pq("M3-04", "qiyin", true, "Sintetik qiyin savol.", "Sintetik javob M3-04."),
+    h2("M4 · Sintetik chuqur (4 ta)"),
+    ...pq("M4-01", "o'rta", true, "Sintetik M4-01.", "Sintetik javob M4-01."),
+    ...pq("M4-02", "o'rta", true, "Sintetik M4-02.", "Sintetik javob M4-02."),
+    ...pq("M4-03", "o'rta", false, "Sintetik M4-03.", "Sintetik javob M4-03."),
+    ...pq("M4-04", "qiyin", false, "Sintetik M4-04.", "Sintetik javob M4-04."),
+    h2("M7 · Sintetik SQL (3 ta)"),
+    ...pq("M7-01", "oson", true, "Sintetik SQL: nechta qator?", "Sintetik javob M7-01.", ["SELECT * FROM t WHERE x = NULL;"]),
+    ...pq("M7-02", "oson", true, "Sintetik SQL so'rov yozing.", "Namuna:", [], ["SELECT name FROM t ORDER BY name;"]),
+    ...pq("M7-03", "qiyin", false, "Sintetik SQL nega?", "Sintetik javob M7-03."),
+
+    h1("5. Qisman o'tilgan va hali o'tilmagan modullar"),
+    h2("M10 · Sintetik Django (1 ta)"),
+    ...pq("M10-01", "o'rta", true, "[auth] Sintetik auth savol.", "Sintetik javob M10-01.", ["User.objects.create(username='x')"]),
+    h2("M5 · Sintetik OOP (hali o'tilmagan) (1 ta)"),
+    ...pq("M5-01", "oson", false, "Sintetik OOP savol.", "Sintetik javob M5-01.", [], ["<ul>", "{% for x in xs %}<li>{{ x }}</li>{% endfor %}", "</ul>"]),
+  ];
+}
+
+module.exports.syntheticPythonBlocks = syntheticPythonBlocks;

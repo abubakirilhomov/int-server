@@ -31,6 +31,13 @@ function parseSize(raw, cfg) {
   return n;
 }
 const actorId = (req) => req.user?.id || req.user?._id || null;
+// Сколько вопросов из extras правила трека добавить (0–5; лимит трека — в генераторе).
+function parseExtras(raw) {
+  if (raw === undefined || raw === null || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 5) throw new AppError("extras — целое 0–5", 400);
+  return n;
+}
 const SNAPSHOT_FIELDS = "code topic level isPractical prompt promptRu promptShort promptShortRu options answerKind editor sandbox demo +tests";
 
 async function loadInterview(id) {
@@ -134,8 +141,13 @@ exports.listSets = catchAsync(async (req, res) => {
   }
   if (!track) throw new AppError("Укажите track", 400);
   const mode = await resolveInterviewMode(track, cfg);
-  const r = await sets.suggestSets({ track, applicationId, interviewId, avoidRecent: cfg.avoidRecentSets });
-  res.json({ track, mode, defaultSize: cfg.defaultSetSize, sizeRange: SIZE_RANGE, ...r });
+  const [r, rules] = await Promise.all([
+    sets.suggestSets({ track, applicationId, interviewId, avoidRecent: cfg.avoidRecentSets }),
+    sets.loadRules(track),
+  ]);
+  // extras — что правило трека разрешает сверх основного набора (Python: HTML/CSS из JS-банка).
+  const extras = rules.extras ? { codes: rules.extras.codes, max: rules.extras.max, maxTotal: rules.extras.maxTotal } : null;
+  res.json({ track, mode, defaultSize: cfg.defaultSetSize, sizeRange: SIZE_RANGE, extras, ...r });
 });
 
 exports.previewSet = catchAsync(async (req, res) => {
@@ -149,11 +161,11 @@ exports.previewSet = catchAsync(async (req, res) => {
   }
   let r;
   try {
-    r = await sets.previewGenerated({ track, size, applicationId, interviewId, avoidRecent: cfg.avoidRecentSets });
+    r = await sets.previewGenerated({ track, size, extras: parseExtras(req.body?.extras), applicationId, interviewId, avoidRecent: cfg.avoidRecentSets });
   } catch (e) {
     throw new AppError(e.message, 422);
   }
-  res.json({ track, size, questionCodes: r.codes, violations: r.violations, repeated: r.repeated, overlap: r.overlap, retake: r.retake });
+  res.json({ track, size, questionCodes: r.codes, extras: r.extras, violations: r.violations, repeated: r.repeated, overlap: r.overlap, retake: r.retake });
 });
 
 exports.setsOverview = catchAsync(async (req, res) => {
@@ -192,14 +204,19 @@ exports.start = catchAsync(async (req, res) => {
       const size = parseSize(body.size, cfg);
       try {
         codes = (await sets.previewGenerated({
-          track, size,
+          track, size, extras: parseExtras(body.extras),
           applicationId: interview.application, interviewId: interview._id, avoidRecent: cfg.avoidRecentSets,
         })).codes;
       } catch (e) {
         throw new AppError(e.message, 422);
       }
     }
-    const valid = await BankQuestion.countDocuments({ code: { $in: codes }, tracks: track, isActive: true });
+    // Вопросы направления + extras правила трека (Python: HTML/CSS из JS-банка); лимиты extras
+    // и уровни проверяет InterviewSet pre-validate.
+    const extraCodes = (await sets.loadRules(track)).extras?.codes || [];
+    const valid = await BankQuestion.countDocuments({
+      code: { $in: codes }, isActive: true, $or: [{ tracks: track }, { code: { $in: extraCodes } }],
+    });
     if (!codes.length || valid !== codes.length || new Set(codes).size !== codes.length) {
       throw new AppError("Набор: повтор или вопрос не из банка этого направления", 400);
     }

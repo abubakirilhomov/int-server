@@ -183,3 +183,22 @@ describe("повторы — не нарушение", () => {
     }
   });
 });
+
+describe("ремонт мягких правил", () => {
+  test("мини-задание и amaliy из исключённых всё равно попадают в набор — повтор дешевле нарушения", () => {
+    const mini = BANK.filter((q) => q.isMiniTask && q.tracks.includes("frontend-react"));
+    const practical = BANK.filter((q) => q.isPractical && q.tracks.includes("frontend-react"));
+    const exclude = [...mini, ...practical].map((q) => q.code);
+    expect(mini.length).toBeGreaterThan(0);
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const r = generateSet({ questions: BANK, track: "frontend-react", size: 18, rules: RULES, exclude, rng: rngFrom(seed) });
+      expect(r.violations).toEqual([]);
+      expect(countBy(r.codes, (q) => q.isMiniTask)).toBeGreaterThanOrEqual(1);
+      expect(countBy(r.codes, (q) => q.isPractical)).toBeGreaterThanOrEqual(RULES.minPractical);
+      expect(r.repeated.length).toBeGreaterThan(0);
+      const want = levelQuota(18, RULES);
+      LEVELS.forEach((l) => expect(countBy(r.codes, (q) => q.level === l)).toBe(want[l]));
+      topicQuota(RULES, "frontend-react", 18).forEach((g) => expect(countBy(r.codes, (q) => g.topics.includes(q.topic))).toBe(g.count));
+    }
+  });
+});

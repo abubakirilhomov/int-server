@@ -67,6 +67,41 @@ function attempt(pool, groups, want, rng, avoid) {
   return LEVELS.every((l) => left[l] === 0) ? picked : null;
 }
 
+// Ремонт мягких правил обменами «тот же трек-тема-уровень»: жадный подбор берёт
+// свежие вопросы и никогда не возьмёт мини-задание/amaliy из исключённых, даже
+// если иначе правило нарушится. Обмен не трогает квоты тем и уровней. Повтор
+// дешевле нарушения правила.
+function repairSoft(picked, pool, rules, avoid, rng) {
+  let cur = picked.slice();
+  const inPicked = (code) => cur.some((q) => q.code === code);
+  const hasMini = pool.some((q) => q.isMiniTask);
+  const state = (qs) => ({
+    mini: hasMini && !qs.some((q) => q.isMiniTask),
+    practical: rules?.minPractical != null ? Math.max(0, rules.minPractical - qs.filter((q) => q.isPractical).length) : 0,
+  });
+  const score = (st) => (st.mini ? 1 : 0) + st.practical;
+  for (let guard = 0; guard < 40; guard += 1) {
+    const st = state(cur);
+    if (!score(st)) break;
+    let best = null;
+    for (let oi = 0; oi < cur.length; oi += 1) {
+      const out = cur[oi];
+      for (const cand of shuffle(pool, rng)) {
+        if (cand.topic !== out.topic || cand.level !== out.level || inPicked(cand.code)) continue;
+        if (cand.conflictGroup && cur.some((q, i) => i !== oi && q.conflictGroup === cand.conflictGroup)) continue;
+        const next = cur.slice(); next[oi] = cand;
+        const gain = score(st) - score(state(next));
+        if (gain <= 0) continue;
+        const repeats = (avoid.has(cand.code) ? 1 : 0) - (avoid.has(out.code) ? 1 : 0);
+        if (!best || gain > best.gain || (gain === best.gain && repeats < best.repeats)) best = { next, gain, repeats };
+      }
+    }
+    if (!best) break;
+    cur = best.next;
+  }
+  return cur;
+}
+
 function softViolations(qs, rules, avoid, pool) {
   const v = [];
   const practical = qs.filter((q) => q.isPractical).length;
@@ -99,8 +134,9 @@ function generateSet({ questions, track, size, rules, exclude = [], rng = Math.r
   const search = (groups) => {
     let best = null;
     for (let i = 0; i < attempts; i += 1) {
-      const picked = attempt(pool, groups, want, rng, avoid);
-      if (!picked) continue;
+      const first = attempt(pool, groups, want, rng, avoid);
+      if (!first) continue;
+      const picked = repairSoft(first, pool, rules, avoid, rng);
       const violations = softViolations(picked, rules, avoid, pool);
       const repeated = picked.filter((q) => avoid.has(q.code)).map((q) => q.code);
       // Нарушение правила весит больше любого числа повторов.

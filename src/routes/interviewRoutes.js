@@ -15,6 +15,7 @@ router.post("/schedule", controller.schedule);
 // Живые собеседования по банку (этап 2). Статичные пути — до /:id.
 router.get("/live/sets", live.listSets);
 router.post("/live/sets/preview", live.previewSet);
+router.get("/live/sets/overview", live.setsOverview);
 router.get("/live/history", live.setHistory);
 router.post("/:id/live", live.start);
 router.get("/:id/live", live.getLive);

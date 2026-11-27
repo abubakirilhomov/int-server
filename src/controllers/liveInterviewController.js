@@ -18,9 +18,18 @@ const access = require("../services/candidateAccess");
 const { toLiveView, isOnline } = require("../serializers/liveInterviewView");
 const { computeQuestionScore } = require("../utils/scoreInterview");
 const { buildLetters } = require("../utils/roadmapLetter");
+const { SIZE_RANGE } = require("../utils/questionBank/setLevels");
 const { normalizeLanguage } = require("../utils/questionBank/i18n");
 
 const isId = (id) => mongoose.isValidObjectId(id);
+// Размер собеседования: целое число, по умолчанию из конфига (18). Допустимые
+// размеры (15–20 и явные правила) определяет правило уровней: иначе 422.
+function parseSize(raw, cfg) {
+  if (raw === undefined || raw === null || raw === "") return cfg.defaultSetSize;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 100) throw new AppError("Размер собеседования — целое число вопросов", 400);
+  return n;
+}
 const actorId = (req) => req.user?.id || req.user?._id || null;
 const SNAPSHOT_FIELDS = "code topic level isPractical prompt promptRu promptShort promptShortRu options answerKind sandbox demo";
 
@@ -107,13 +116,13 @@ exports.listSets = catchAsync(async (req, res) => {
   if (!track) throw new AppError("Укажите track", 400);
   const mode = await resolveInterviewMode(track, cfg);
   const r = await sets.suggestSets({ track, applicationId, interviewId, avoidRecent: cfg.avoidRecentSets });
-  res.json({ track, mode, defaultSize: cfg.defaultSetSize, ...r });
+  res.json({ track, mode, defaultSize: cfg.defaultSetSize, sizeRange: SIZE_RANGE, ...r });
 });
 
 exports.previewSet = catchAsync(async (req, res) => {
   const cfg = await getCandidateInterviewConfig();
   const { track, interviewId } = req.body || {};
-  const size = Number(req.body?.size) || cfg.defaultSetSize;
+  const size = parseSize(req.body?.size, cfg);
   if (!track) throw new AppError("Укажите track", 400);
   let applicationId = null;
   if (isId(interviewId)) {
@@ -125,7 +134,12 @@ exports.previewSet = catchAsync(async (req, res) => {
   } catch (e) {
     throw new AppError(e.message, 422);
   }
-  res.json({ track, size, questionCodes: r.codes, violations: r.violations });
+  res.json({ track, size, questionCodes: r.codes, violations: r.violations, overlap: r.overlap, retake: r.retake });
+});
+
+exports.setsOverview = catchAsync(async (req, res) => {
+  if (!req.query.track) throw new AppError("Укажите track", 400);
+  res.json(await sets.setsOverview({ track: req.query.track, recentN: Math.min(Number(req.query.recent) || 8, 15) }));
 });
 
 exports.setHistory = catchAsync(async (req, res) => {
@@ -156,9 +170,10 @@ exports.start = catchAsync(async (req, res) => {
   } else if (body.generate || Array.isArray(body.questionCodes)) {
     let codes = body.questionCodes;
     if (!Array.isArray(codes)) {
+      const size = parseSize(body.size, cfg);
       try {
         codes = (await sets.previewGenerated({
-          track, size: Number(body.size) || cfg.defaultSetSize,
+          track, size,
           applicationId: interview.application, interviewId: interview._id, avoidRecent: cfg.avoidRecentSets,
         })).codes;
       } catch (e) {

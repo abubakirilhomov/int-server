@@ -36,6 +36,7 @@ describe("toCandidateQuestion", () => {
       position: 1,
       prompt: "Sintetik savol: funksiya yozing.",
       answerKind: "sandbox",
+      editor: "js",
       sandbox: { template: "vanilla", files: { "/index.js": "// start" } },
     });
     const keys = deepKeys(out);
@@ -71,9 +72,24 @@ describe("toCandidateSession", () => {
       current: 2,
       questions: [
         { position: 1, prompt: "Yopilgan savol", answerKind: "text", state: "closed" },
-        { position: 2, prompt: "Ochiq savol", answerKind: "code", state: "open" },
+        { position: 2, prompt: "Ochiq savol", answerKind: "code", editor: "web", state: "open" },
       ],
     });
+  });
+
+  test("редактор по треку: web / js / jsx / vue / html / node; не код → нет поля", () => {
+    const ed = (code, answerKind = "code", sandbox) => toCandidateQuestion({ code, prompt: "x", answerKind, sandbox }, 1).editor;
+    expect(["H1", "C1", "J1", "R1", "V1", "T1", "N1", "A1"].map((c) => ed(c))).toEqual(["web", "web", "js", "jsx", "vue", "html", "node", "node"]);
+    expect(ed("J1", "text")).toBeUndefined();
+    expect(ed("J1", "choice")).toBeUndefined();
+    expect(ed("C1", "sandbox", { template: "vanilla" })).toBe("js");
+  });
+
+  test("заглушка заморозки (пустой ответ без черновика) — как «ответа нет»", () => {
+    const out = toCandidateSession(session, "uz", { C1: { text: "", revision: 0, frozenAt: new Date() } });
+    expect(out.questions[1].answer).toBeNull();
+    const real = toCandidateSession(session, "uz", { C1: { text: "", revision: 2, draftUpdatedAt: new Date(), frozenAt: new Date() } });
+    expect(real.questions[1].answer).toMatchObject({ text: "", revision: 2, frozen: true });
   });
 
   test("ни оценок, ни заметок, ни кодов, ни сигналов, ни интервьюера", () => {
